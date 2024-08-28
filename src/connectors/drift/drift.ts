@@ -61,8 +61,7 @@ export class DriftConnector extends BaseConnector {
     public async fetchUSDCBalance(): Promise<number> {
         this.assertInitialized();
         const user = this.driftClient.getUser();
-        const tokenBalance = await user.getFreeCollateral();
-        this.logger.info("USDC Balance: " + tokenBalance);
+        const tokenBalance = Number(await user.getFreeCollateral()) / this.perpPricePrecision;
         return Number(tokenBalance);
     }
 
