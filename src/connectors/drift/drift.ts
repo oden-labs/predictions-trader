@@ -1,70 +1,73 @@
+import { BaseConnector } from "../BaseConnector";
+import { ConfigService } from "../../utils/ConfigService";
 import { Connection, Keypair } from "@solana/web3.js";
-import { Wallet, MainnetPerpMarkets, DriftClient, OrderType, PositionDirection } from "@drift-labs/sdk";
-import dotenv from 'dotenv';
-import path from 'path';
+import { Wallet, MainnetPerpMarkets, DriftClient, OrderType, PositionDirection, BulkAccountLoader } from "@drift-labs/sdk";
 import bs58 from 'bs58';
 import { DRIFT_HOST } from '../../constants'
 import axios from 'axios';
-import { Orderbook, OrderLevel } from "../../models/types";
+import { Orderbook, Side } from "../../models/types";
 
 
-dotenv.config({ path: path.resolve(__dirname, '../../../.env') });
-
-export class DriftConnector {
+export class DriftConnector extends BaseConnector {
 
     private driftClient: DriftClient;
-    private initialized: boolean = false;
     private perpPricePrecision: number = 1e6;
     private perpSizePrecision: number = 1e9;
 
-    constructor() {
-        //Load enviornment variables
-        const connection = new Connection(process.env.SOLANA_RPC_URL || "");
-        const solanaPrivateKey = process.env.SOLANA_PRIVATE_KEY;
+    constructor(private config: ConfigService) {
+        super();
+        //Get enviornment variables
+        const connection = new Connection(this.config.get("SOLANA_RPC_URL"));
+        const solanaPrivateKey = this.config.get("SOLANA_PRIVATE_KEY");
 
         //Ensure environment variables are set
-        if (!solanaPrivateKey || connection === null) {
-            throw new Error('Private key or RPC URL not found in the env file');
+        if (!solanaPrivateKey || connection == null) {
+            this.logger.error("Private key or RPC URL not found in config");
         }
 
         //Initialize the wallet
         const privateKeyBuffer = bs58.decode(solanaPrivateKey);
         const keypair = Keypair.fromSecretKey(privateKeyBuffer);
         const wallet = new Wallet(keypair);
-        console.log("Initialized Solana wallet with public key: " + wallet.publicKey);
-        this.initialized = false;
-
+        this.logger.info("Initialized Solana wallet with public key: " + wallet.publicKey);
 
         //Initialize the Drift Client
         this.driftClient = new DriftClient({
             connection,
             wallet,
             env: 'mainnet-beta',
+            activeSubAccountId: 2,
             accountSubscription: {
-                type: 'websocket',
+                type: 'polling',
+                accountLoader: new BulkAccountLoader(connection, 'confirmed', 1000)
             }
         });
     }
 
-    async init() {
-        console.log("Subscribing to Drift...");
+    async init(): Promise<void> {
+        this.logger.info("Subscribing to Drift...");
         await this.driftClient.subscribe();
+        this.logger.info("Subscribed to Drift!");
         this.initialized = true;
-        console.log("Subscribed to Drift!");
-    }
-
-    public isInitialized(): boolean {
-        return this.initialized;
     }
 
     //Functions to interact with the Drift API
     private getMarketIndex(symbol: string): number | undefined {
+        this.assertInitialized();
         const market = MainnetPerpMarkets.find(market => market.symbol === symbol);
         return market ? market.marketIndex : undefined;
     }
 
+    public async fetchUSDCBalance(): Promise<number> {
+        this.assertInitialized();
+        const user = this.driftClient.getUser();
+        const tokenBalance = await user.getFreeCollateral();
+        this.logger.info("USDC Balance: " + tokenBalance);
+        return Number(tokenBalance);
+    }
 
     async fetchOrderbook(marketName: string): Promise<Orderbook> {
+        this.assertInitialized();
         const depth = 10;
         const url = `${DRIFT_HOST}l2?marketName=${marketName}&depth=${depth}`;
 
@@ -85,20 +88,22 @@ export class DriftConnector {
             };
 
             return scaledOrderbook;
-        } catch (error) {
-            console.error('Error fetching orderbook:', error);
+        } catch (error: any) {
+            this.logger.error('Error fetching orderbook:', error);
             throw error;
         }
     }
 
-    async placeLimitOrder(marketName: string, /* side: PositionDirection, */ price: number, size: number) {
-        if (!this.isInitialized) {
-            console.log("Cannot create orders as Drift is not initialized yet.");
-            return;
-        }
+    async createFOKOrder(marketName: string, price: number, size: number, side: Side) {
+        this.assertInitialized();
+        throw ("Not implemented error");
+    }
+
+    async createLimitOrder(marketName: string, price: number, size: number, side: Side) {
+        this.assertInitialized();
         const marketIndex = this.getMarketIndex(marketName);
         if (!marketIndex) {
-            console.log(`Market ${marketName} not found.`);
+            this.logger.error("Error when fetching market index.", new Error(`Market ${marketName} not found.`));
             return;
         }
 
@@ -110,6 +115,6 @@ export class DriftConnector {
             price: this.driftClient.convertToPricePrecision(price),
         }
         const txHash = await this.driftClient.placePerpOrder(orderParams);
-        console.log("Order placed on DRIFT for market: ", marketName, "with price: ", price, "and size: ", size, ".  Transaction hash: ", txHash);;
+        this.logger.info("Order placed on DRIFT for market: " + marketName + "with price: " + price + "and size: " + size + ".  Transaction hash: " + txHash);;
     }
 }
