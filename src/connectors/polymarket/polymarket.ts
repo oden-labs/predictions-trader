@@ -3,6 +3,8 @@ import { ApiKeyCreds, Chain, ClobClient, OrderType, Side } from "@polymarket/clo
 import dotenv from 'dotenv';
 import path from 'path';
 import { POLYMARKET_HOST } from "../../constants";
+import { Orderbook, OrderLevel } from "../../models/types";
+
 dotenv.config({ path: path.resolve(__dirname, '../../../.env') });
 
 export class PolymarketConnector {
@@ -11,7 +13,7 @@ export class PolymarketConnector {
     //Polymarket Setup
     private creds!: ApiKeyCreds;
     private clobClient: ClobClient;
-    private isInitialized: boolean = false;
+    private initialized: boolean = false;
     private proxyAddress: string;
 
     constructor() {
@@ -38,7 +40,11 @@ export class PolymarketConnector {
         await this.setSecrets();
         console.log("Successfully fetched API creds from Polymarket");
         this.clobClient = new ClobClient(POLYMARKET_HOST, Chain.POLYGON, this.wallet, this.creds, 2, this.proxyAddress);
-        this.isInitialized = true;
+        this.initialized = true;
+    }
+
+    public isInitialized(): boolean {
+        return this.initialized;
     }
 
     async setSecrets() {
@@ -51,18 +57,25 @@ export class PolymarketConnector {
     }
 
     async getTrades() {
-        if (this.isInitialized === false) {
+        if (this.initialized === false) {
             throw new Error("Polymarket connector not initialized");
         }
         const resp = await this.clobClient.getTrades();
         console.log(resp);
     }
 
-    async fetchOrderbook(tokenID: string) {
+    async fetchOrderbook(tokenID: string): Promise<Orderbook> {
         try {
             const resp = await this.clobClient.getOrderBook(tokenID);
-            console.log("Orderbook: ", resp);
-            return resp;
+            const orderbook: Orderbook = {
+                bids: resp.bids
+                    .map(bid => ({ price: Number(bid.price), size: Number(bid.size) }))
+                    .sort((a, b) => b.price - a.price),
+                asks: resp.asks
+                    .map(ask => ({ price: Number(ask.price), size: Number(ask.size) }))
+                    .sort((a, b) => a.price - b.price)
+            };
+            return orderbook;
         } catch (error) {
             console.error("Failed to fetch orderbook from Polymarket", error);
             throw new Error("Failed to fetch orderbook");

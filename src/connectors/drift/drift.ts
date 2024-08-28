@@ -5,13 +5,17 @@ import path from 'path';
 import bs58 from 'bs58';
 import { DRIFT_HOST } from '../../constants'
 import axios from 'axios';
+import { Orderbook, OrderLevel } from "../../models/types";
+
 
 dotenv.config({ path: path.resolve(__dirname, '../../../.env') });
 
 export class DriftConnector {
 
     private driftClient: DriftClient;
-    private isInitialized: boolean = false;
+    private initialized: boolean = false;
+    private perpPricePrecision: number = 1e6;
+    private perpSizePrecision: number = 1e9;
 
     constructor() {
         //Load enviornment variables
@@ -28,7 +32,7 @@ export class DriftConnector {
         const keypair = Keypair.fromSecretKey(privateKeyBuffer);
         const wallet = new Wallet(keypair);
         console.log("Initialized Solana wallet with public key: " + wallet.publicKey);
-        this.isInitialized = false;
+        this.initialized = false;
 
 
         //Initialize the Drift Client
@@ -45,10 +49,13 @@ export class DriftConnector {
     async init() {
         console.log("Subscribing to Drift...");
         await this.driftClient.subscribe();
-        this.isInitialized = true;
+        this.initialized = true;
         console.log("Subscribed to Drift!");
     }
 
+    public isInitialized(): boolean {
+        return this.initialized;
+    }
 
     //Functions to interact with the Drift API
     private getMarketIndex(symbol: string): number | undefined {
@@ -57,16 +64,27 @@ export class DriftConnector {
     }
 
 
-    async getOrderbook(marketName: string) {
+    async fetchOrderbook(marketName: string): Promise<Orderbook> {
         const depth = 10;
         const url = `${DRIFT_HOST}l2?marketName=${marketName}&depth=${depth}`;
 
         try {
             const response = await axios.get(url);
-            const l2Orderbook = response.data;
+            const l2Orderbook: any = response.data;
 
-            console.log(`L2 Orderbook for ${marketName}:`, l2Orderbook);
-            return l2Orderbook;
+            // Scale down price and volume since Drift sends orderbook in precision values
+            const scaledOrderbook: Orderbook = {
+                bids: l2Orderbook.bids.map((bid: { price: string, size: string }) => ({
+                    price: Number(bid.price) / this.perpPricePrecision,
+                    size: Number(bid.size) / this.perpSizePrecision
+                })),
+                asks: l2Orderbook.asks.map((ask: { price: string, size: string }) => ({
+                    price: Number(ask.price) / this.perpPricePrecision,
+                    size: Number(ask.size) / this.perpSizePrecision
+                }))
+            };
+
+            return scaledOrderbook;
         } catch (error) {
             console.error('Error fetching orderbook:', error);
             throw error;
