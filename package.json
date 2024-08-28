@@ -1,0 +1,31 @@
+{
+  "name": "predictions-trader",
+  "version": "1.0.0",
+  "description": "Predictions trading bot",
+  "main": "index.js",
+  "directories": {
+    "test": "test"
+  },
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/oden-labs/predictions-trader.git"
+  },
+  "author": "",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/oden-labs/predictions-trader/issues"
+  },
+  "homepage": "https://github.com/oden-labs/predictions-trader#readme",
+  "dependencies": {
+    "@drift-labs/sdk": "^2.94.0-beta.7",
+    "@polymarket/clob-client": "^4.8.1",
+    "@solana/web3.js": "^1.95.3",
+    "axios": "^1.7.5",
+    "bs58": "^6.0.0",
+    "dotenv": "^16.4.5",
+    "path": "^0.12.7"
+  }
+}
