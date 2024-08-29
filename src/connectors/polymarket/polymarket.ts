@@ -16,8 +16,8 @@ export class PolymarketConnector extends BaseConnector {
     private clobClient: ClobClient;
     private proxyAddress: string;
 
-    constructor(private config: ConfigService) {
-        super();
+    constructor(private config: ConfigService, connectorName: string) {
+        super(connectorName);
         const privateKey = this.config.get("ETHEREUM_PRIVATE_KEY");
         this.polygonRPCURL = this.config.get("POLYGON_RPC_URL");
         if (!privateKey) {
@@ -64,18 +64,22 @@ export class PolymarketConnector extends BaseConnector {
     async fetchOrderbook(tokenID: string): Promise<Orderbook> {
         try {
             const resp = await this.clobClient.getOrderBook(tokenID);
-            const orderbook: Orderbook = {
-                bids: resp.bids
-                    .map(bid => ({ price: Number(bid.price), size: Number(bid.size) }))
-                    .sort((a, b) => b.price - a.price),
-                asks: resp.asks
-                    .map(ask => ({ price: Number(ask.price), size: Number(ask.size) }))
-                    .sort((a, b) => a.price - b.price)
-            };
-            return orderbook;
+            console.log(resp);
+            if (resp) {
+                const orderbook: Orderbook = {
+                    bids: resp.bids
+                        .map(bid => ({ price: Number(bid.price), size: Number(bid.size) }))
+                        .sort((a, b) => b.price - a.price),
+                    asks: resp.asks
+                        .map(ask => ({ price: Number(ask.price), size: Number(ask.size) }))
+                        .sort((a, b) => a.price - b.price)
+                };
+                return orderbook;
+            }
+            else throw new Error("Failed to fetch orderbook from Polymarket");
         } catch (error: any) {
             this.logger.error("Failed to fetch orderbook from Polymarket", error);
-            throw error;
+            return { bids: [], asks: [] };
         }
     }
 

@@ -1,7 +1,7 @@
 import { BaseConnector } from "../BaseConnector";
 import { ConfigService } from "../../utils/ConfigService";
 import { Connection, Keypair } from "@solana/web3.js";
-import { Wallet, MainnetPerpMarkets, DriftClient, OrderType, PositionDirection, BulkAccountLoader } from "@drift-labs/sdk";
+import { Wallet, MainnetPerpMarkets, DriftClient, OrderType, PositionDirection } from "@drift-labs/sdk";
 import bs58 from 'bs58';
 import { DRIFT_HOST } from '../../constants'
 import axios from 'axios';
@@ -14,8 +14,8 @@ export class DriftConnector extends BaseConnector {
     private perpPricePrecision: number = 1e6;
     private perpSizePrecision: number = 1e9;
 
-    constructor(private config: ConfigService) {
-        super();
+    constructor(private config: ConfigService, connectorName: string) {
+        super(connectorName);
         //Get enviornment variables
         const connection = new Connection(this.config.get("SOLANA_RPC_URL"));
         const solanaPrivateKey = this.config.get("SOLANA_PRIVATE_KEY");
@@ -36,10 +36,9 @@ export class DriftConnector extends BaseConnector {
             connection,
             wallet,
             env: 'mainnet-beta',
-            activeSubAccountId: 2,
             accountSubscription: {
-                type: 'polling',
-                accountLoader: new BulkAccountLoader(connection, 'confirmed', 1000)
+                type: 'websocket',
+                // accountLoader: new BulkAccountLoader(connection, 'confirmed', 1000)
             }
         });
     }
@@ -89,11 +88,12 @@ export class DriftConnector extends BaseConnector {
             return scaledOrderbook;
         } catch (error: any) {
             this.logger.error('Error fetching orderbook:', error);
-            throw error;
+            return { bids: [], asks: [] };
+
         }
     }
 
-    async createFOKOrder(marketName: string, price: number, size: number, side: Side) {
+    async createFOKOrder(_marketName: string, _price: number, _size: number, _side: Side) {
         this.assertInitialized();
         throw ("Not implemented error");
     }
@@ -106,10 +106,12 @@ export class DriftConnector extends BaseConnector {
             return;
         }
 
+        const position: PositionDirection = side === Side.BUY ? PositionDirection.LONG : PositionDirection.SHORT;
+
         const orderParams = {
             orderType: OrderType.LIMIT,
             marketIndex: marketIndex,
-            direction: PositionDirection.LONG,
+            direction: position,
             baseAssetAmount: this.driftClient.convertToPerpPrecision(size),
             price: this.driftClient.convertToPricePrecision(price),
         }

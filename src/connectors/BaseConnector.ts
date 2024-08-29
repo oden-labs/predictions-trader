@@ -5,9 +5,11 @@ import { Logger } from "../utils/logger";
 export abstract class BaseConnector implements IConnector {
     protected initialized: boolean = false;
     protected logger: Logger;
+    public name: string;
 
-    constructor() {
+    constructor(connectorName: string) {
         this.logger = new Logger(this.constructor.name);
+        this.name = connectorName;
     }
 
     abstract init(): Promise<void>;
