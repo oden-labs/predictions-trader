@@ -15,6 +15,7 @@ export class ArbStrategy extends BaseStrategy {
   }
 
   async init() {
+    super.init();
     this.logger.info("Initialized " + this.arbStrategyConfig.id);
   }
 
@@ -45,6 +46,7 @@ export class ArbStrategy extends BaseStrategy {
           const size = Math.min(sourceBid.size, targetAsk.size, maxSizeByBalance);
           const profit = (1 - (sourceBid.price + targetAsk.price)) * size;
           if (profit > 0) {
+            //Buy low in target exchange and sell high in source exchange -> ezpz  
             totalProfit += profit;
             this.logger.info(`Opportunity: Buy ${size} NO tokens on ${this.targetConnector.name} at ${targetAsk.price} and BUY ${size} YES tokens on ${this.sourceConnector.name} at ${sourceBid.price}. Profit: ${profit}`);
           }
@@ -52,7 +54,7 @@ export class ArbStrategy extends BaseStrategy {
       }
     }
 
-    // Check target bids against Drift asks
+    // Check target exchange bids against source exchange asks
     for (const targetBid of targetOrderbook.bids) {
       for (const sourceAsk of sourceOrderbook.asks) {
         if (targetBid.price > sourceAsk.price) {
@@ -63,8 +65,10 @@ export class ArbStrategy extends BaseStrategy {
           const size = Math.min(targetBid.size, sourceAsk.size, maxSizeByBalance);
           const profit = (targetBid.price - sourceAsk.price) * size;
           if (profit > 0) {
+            //Buy low in the source exchange and sell high in the target exchange -> ezpz
             totalProfit += profit;
-            this.logger.info(`Opportunity: Long ${size} on ${this.sourceConnector.name} at ${sourceAsk.price}, Short on ${this.targetConnector.name} at ${targetBid.price}. Profit: ${profit}`);
+            this.logger.info(`Opportunity: Buy ${size} on ${this.sourceConnector.name} at ${sourceAsk.price}, and sell on ${this.targetConnector.name} at ${targetBid.price}. Profit: ${profit}`);
+
           }
         }
       }

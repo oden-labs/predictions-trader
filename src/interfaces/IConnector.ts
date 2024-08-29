@@ -4,8 +4,8 @@ export interface IConnector {
   init(): Promise<void>;
   fetchOrderbook(marketId: string): Promise<Orderbook>;
   isInitialized(): Boolean;
-  createLimitOrder(marketId: string, price: number, size: number, side: Side): Promise<void>;
-  createFOKOrder(marketId: string, price: number, size: number, side: Side): Promise<void>;
+  createLimitOrder(marketId: string, price: number, size: number, side: Side): Promise<boolean>;
+  createFOKOrder(marketId: string, price: number, size: number, side: Side): Promise<boolean>;
   fetchUSDCBalance(): Promise<number>;
 }
 

@@ -10,6 +10,8 @@ import { Orderbook, Side } from "../../models/types";
 
 export class DriftConnector extends BaseConnector {
 
+    private marketData: { [slug: string]: { marketIndex: number } } = {};
+
     private driftClient: DriftClient;
     private perpPricePrecision: number = 1e6;
     private perpSizePrecision: number = 1e9;
@@ -36,6 +38,7 @@ export class DriftConnector extends BaseConnector {
             connection,
             wallet,
             env: 'mainnet-beta',
+            activeSubAccountId: 2,
             accountSubscription: {
                 type: 'websocket',
                 // accountLoader: new BulkAccountLoader(connection, 'confirmed', 1000)
@@ -51,11 +54,29 @@ export class DriftConnector extends BaseConnector {
     }
 
     //Functions to interact with the Drift API
-    private getMarketIndex(symbol: string): number | undefined {
+
+    async registerMarket(symbol: string): Promise<void> {
         this.assertInitialized();
-        const market = MainnetPerpMarkets.find(market => market.symbol === symbol);
-        return market ? market.marketIndex : undefined;
+        try {
+            const market = MainnetPerpMarkets.find(market => market.symbol === symbol);
+            if (!market) {
+                throw new Error(`Market ${symbol} not found in MainnetPerpMarkets`);
+            }
+            if (typeof market.marketIndex !== 'number') {
+                throw new Error(`Invalid market index for ${symbol}`);
+            }
+            this.marketData[symbol] = { marketIndex: market.marketIndex };
+            this.logger.info(`Successfully registered market: ${symbol}`);
+        } catch (error) {
+            if (error instanceof Error) {
+                this.logger.error(`Error registering market ${symbol}: ${error.message}`);
+            } else {
+                this.logger.error(`Unknown error while registering market ${symbol}`);
+            }
+            throw error;
+        }
     }
+
 
     public async fetchUSDCBalance(): Promise<number> {
         this.assertInitialized();
@@ -93,17 +114,34 @@ export class DriftConnector extends BaseConnector {
         }
     }
 
-    async createFOKOrder(_marketName: string, _price: number, _size: number, _side: Side) {
+    async createFOKOrder(marketName: string, price: number, size: number, side: Side): Promise<boolean> {
         this.assertInitialized();
-        throw ("Not implemented error");
+        const position: PositionDirection = side === Side.BUY ? PositionDirection.LONG : PositionDirection.SHORT;
+        const marketIndex = this.marketData[marketName].marketIndex;
+        if (!marketIndex) {
+            this.logger.error("Error when fetching market index.", new Error(`Market ${marketName} not registered.`));
+            return false;
+        }
+
+        const orderParams = {
+            orderType: OrderType.LIMIT,
+            marketIndex: marketIndex,
+            direction: position,
+            baseAssetAmount: this.driftClient.convertToPerpPrecision(size),
+            price: this.driftClient.convertToPerpPrecision(price),
+            immediateOrCancel: true,
+        }
+        const txHash = await this.driftClient.placePerpOrder(orderParams);
+        this.logger.info("Order placed on DRIFT for market: " + marketName + "with price: " + price + "and size: " + size + ".  Transaction hash: " + txHash);
+        return true;
     }
 
     async createLimitOrder(marketName: string, price: number, size: number, side: Side) {
         this.assertInitialized();
-        const marketIndex = this.getMarketIndex(marketName);
+        const marketIndex = this.marketData[marketName].marketIndex;
         if (!marketIndex) {
-            this.logger.error("Error when fetching market index.", new Error(`Market ${marketName} not found.`));
-            return;
+            this.logger.error("Error when fetching market data.", new Error(`Market ${marketName} not registered.`));
+            return false;
         }
 
         const position: PositionDirection = side === Side.BUY ? PositionDirection.LONG : PositionDirection.SHORT;
@@ -116,6 +154,7 @@ export class DriftConnector extends BaseConnector {
             price: this.driftClient.convertToPricePrecision(price),
         }
         const txHash = await this.driftClient.placePerpOrder(orderParams);
-        this.logger.info("Order placed on DRIFT for market: " + marketName + "with price: " + price + "and size: " + size + ".  Transaction hash: " + txHash);;
+        this.logger.info("Order placed on DRIFT for market: " + marketName + "with price: " + price + "and size: " + size + ".  Transaction hash: " + txHash);
+        return true;
     }
 }

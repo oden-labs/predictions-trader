@@ -8,7 +8,7 @@ const strategies: BaseStrategyConfig[] = [
         period: 3000,
         source: {
             connector_id: 'polymarket',
-            market_id: '21742633143463906290569050155826241533067272736897614950488156847949938836455',
+            market_id: 'will-donald-trump-win-the-2024-us-presidential-election',
         },
         target: {
             connector_id: 'drift',

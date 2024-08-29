@@ -19,7 +19,15 @@ export abstract class BaseStrategy {
         this.targetConnector = targetConnector;
     }
 
-    abstract init(): Promise<void>;
+    protected async registerMarkets(): Promise<void> {
+        await this.sourceConnector.registerMarket(this.config.source.market_id);
+        await this.targetConnector.registerMarket(this.config.target.market_id);
+    }
+
+    async init(): Promise<void> {
+        await this.registerMarkets();
+    }
+
     abstract run(): Promise<void>;
 
     start(): void {
