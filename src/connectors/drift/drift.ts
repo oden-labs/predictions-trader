@@ -1,7 +1,7 @@
 import { BaseConnector } from "../BaseConnector";
 import { ConfigService } from "../../utils/ConfigService";
 import { Connection, Keypair } from "@solana/web3.js";
-import { Wallet, MainnetPerpMarkets, DriftClient, OrderType, PositionDirection, BulkAccountLoader } from "@drift-labs/sdk";
+import { Wallet, MainnetPerpMarkets, DriftClient, OrderType, PositionDirection } from "@drift-labs/sdk";
 import bs58 from 'bs58';
 import { DRIFT_HOST } from '../../constants'
 import axios from 'axios';
@@ -93,7 +93,7 @@ export class DriftConnector extends BaseConnector {
         }
     }
 
-    async createFOKOrder(marketName: string, price: number, size: number, side: Side) {
+    async createFOKOrder(_marketName: string, _price: number, _size: number, _side: Side) {
         this.assertInitialized();
         throw ("Not implemented error");
     }
@@ -106,10 +106,12 @@ export class DriftConnector extends BaseConnector {
             return;
         }
 
+        const position: PositionDirection = side === Side.BUY ? PositionDirection.LONG : PositionDirection.SHORT;
+
         const orderParams = {
             orderType: OrderType.LIMIT,
             marketIndex: marketIndex,
-            direction: PositionDirection.LONG,
+            direction: position,
             baseAssetAmount: this.driftClient.convertToPerpPrecision(size),
             price: this.driftClient.convertToPricePrecision(price),
         }

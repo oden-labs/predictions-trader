@@ -3,7 +3,7 @@ import { StrategyType, BaseStrategyConfig } from '../src/models/types';
 const strategies: BaseStrategyConfig[] = [
     {
         id: 'arb-poly-drift-trump2024',
-        type: StrategyType.MARKET_MAKING,
+        type: StrategyType.ARBITRAGE,
         enabled: true,
         period: 3000,
         source: {
