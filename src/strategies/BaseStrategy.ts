@@ -5,11 +5,13 @@ import { Logger } from "../utils/logger";
 export abstract class BaseStrategy {
     protected logger: Logger;
     protected interval: NodeJS.Timeout | null = null;
-    protected sourceConnector: BaseConnector;
-    protected targetConnector: BaseConnector;
 
-    constructor(protected config: BaseStrategyConfig) {
-        this.logger = new Logger(config.id);
+    constructor(
+        protected config: BaseStrategyConfig,
+        protected sourceConnector: BaseConnector,
+        protected targetConnector: BaseConnector
+    ) {
+        this.logger = new Logger(this.constructor.name);
     }
 
     setConnectors(sourceConnector: BaseConnector, targetConnector: BaseConnector): void {

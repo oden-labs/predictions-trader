@@ -42,8 +42,7 @@ async function main() {
 
         if (strategyConfig.type == StrategyType.ARBITRAGE) {
             const arbConfig = strategyConfig as ArbStrategyConfig;
-            const strategy = new ArbStrategy(arbConfig);
-            strategy.setConnectors(sourceConnector, targetConnector);
+            const strategy = new ArbStrategy(arbConfig, sourceConnector, targetConnector);
             strategy.start();
         }
     }

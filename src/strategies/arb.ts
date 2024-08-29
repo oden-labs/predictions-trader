@@ -1,11 +1,16 @@
 import { Orderbook, ArbStrategyConfig } from "../models/types";
 import { BaseStrategy } from "./BaseStrategy";
+import {
+  BaseConnector
 
+} from "../connectors/BaseConnector";
 export class ArbStrategy extends BaseStrategy {
   private arbStrategyConfig: ArbStrategyConfig;
 
-  constructor(config: ArbStrategyConfig) {
-    super(config);
+  constructor(config: ArbStrategyConfig, protected sourceConnector: BaseConnector,
+    protected targetConnector: BaseConnector
+  ) {
+    super(config, sourceConnector, targetConnector);
     this.arbStrategyConfig = config;
   }
 
