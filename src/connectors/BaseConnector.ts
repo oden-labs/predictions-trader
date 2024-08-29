@@ -14,9 +14,10 @@ export abstract class BaseConnector implements IConnector {
 
     abstract init(): Promise<void>;
     abstract fetchOrderbook(marketId: string): Promise<Orderbook>;
-    abstract createLimitOrder(marketId: string, price: number, size: number, side: Side): Promise<void>;
-    abstract createFOKOrder(marketId: string, price: number, size: number, side: Side): Promise<void>;
+    abstract createLimitOrder(marketId: string, price: number, size: number, side: Side): Promise<boolean>;
+    abstract createFOKOrder(marketId: string, price: number, size: number, side: Side): Promise<boolean>;
     abstract fetchUSDCBalance(): Promise<number>;
+    abstract registerMarket(markets: string): Promise<void>;
 
     isInitialized(): boolean {
         return this.initialized;

@@ -4,9 +4,11 @@ import { POLYMARKET_HOST, POLYGON_USDC_ADDRESS, POLYGON_USDC_DECIMALS } from "..
 import { Orderbook } from "../../models/types";
 import { BaseConnector } from "../BaseConnector";
 import { ConfigService } from "../../utils/ConfigService";
+import axios from "axios";
 
 export class PolymarketConnector extends BaseConnector {
     private wallet: ethers.Wallet;
+    private marketData: { [slug: string]: { yesTokenId: string, noTokenId: string } } = {};
 
     //Blockchain Balance
     private polygonRPCURL: string;
@@ -58,13 +60,53 @@ export class PolymarketConnector extends BaseConnector {
     async getTrades() {
         this.assertInitialized();
         const resp = await this.clobClient.getTrades();
-        console.log(resp);
+        return resp;
     }
 
-    async fetchOrderbook(tokenID: string): Promise<Orderbook> {
+    async registerMarket(marketSlug: string): Promise<void> {
+        this.assertInitialized();
         try {
+            const resp = await axios.get(`https://gamma-api.polymarket.com/markets?slug=${marketSlug}`);
+            if (!resp.data || resp.data.length === 0) {
+                throw new Error(`No market data found for slug: ${marketSlug}`);
+            }
+            const responseData = resp.data[0];
+            if (!responseData.clobTokenIds) {
+                throw new Error(`No CLOB token IDs found for market: ${marketSlug}`);
+            }
+            const clobTokenIds = JSON.parse(responseData.clobTokenIds);
+            if (!Array.isArray(clobTokenIds) || clobTokenIds.length !== 2) {
+                throw new Error(`Invalid CLOB token IDs format for market: ${marketSlug}`);
+            }
+
+            this.marketData[marketSlug] = {
+                yesTokenId: clobTokenIds[0],
+                noTokenId: clobTokenIds[1]
+            };
+
+            this.logger.info(`Successfully registered market: ${marketSlug}`);
+        } catch (error) {
+            if (axios.isAxiosError(error)) {
+                this.logger.error(`Network error while registering market ${marketSlug}: ${error.message}`);
+            } else if (error instanceof Error) {
+                this.logger.error(`Error registering market ${marketSlug}: ${error.message}`);
+            } else {
+                this.logger.error(`Unknown error while registering market ${marketSlug}`);
+            }
+            throw error;
+        }
+    }
+
+
+    async fetchOrderbook(marketID: string): Promise<Orderbook> {
+        try {
+            let tokenID: string;
+            if (this.marketData[marketID] == undefined) {
+                this.logger.error("Error when fetching market data.", new Error(`Market ${marketID} not registered.`));
+                return { bids: [], asks: [] };
+            }
+            tokenID = this.marketData[marketID].yesTokenId;
             const resp = await this.clobClient.getOrderBook(tokenID);
-            console.log(resp);
             if (resp) {
                 const orderbook: Orderbook = {
                     bids: resp.bids
@@ -83,9 +125,21 @@ export class PolymarketConnector extends BaseConnector {
         }
     }
 
-    async createLimitOrder(tokenID: string, price: number, size: number, side: Side) {
+    async createLimitOrder(marketId: string, price: number, size: number, side: Side): Promise<boolean> {
         this.assertInitialized();
         try {
+            let tokenID: string;
+            if (this.marketData[marketId] == undefined) {
+                this.logger.error("Error when fetching market data.", new Error(`Market ${marketId} not registered.`));
+                return false;
+            }
+            if (side == Side.BUY) {
+                tokenID = this.marketData[marketId].yesTokenId;
+            }
+            else {
+                tokenID = this.marketData[marketId].noTokenId;
+            }
+
             this.logger.info("Creating order with amount:" + size + "and price:" + price);
 
             const order = await this.clobClient.createOrder({
@@ -100,10 +154,10 @@ export class PolymarketConnector extends BaseConnector {
 
             const resp = await this.clobClient.postOrder(order, OrderType.GTC);
             this.logger.info(resp);
-
-            return resp;
+            return true;
         } catch (error: any) {
             this.logger.error("Failed to create order on Polymarket", error);
+            return false;
         }
     }
 
@@ -115,24 +169,36 @@ export class PolymarketConnector extends BaseConnector {
         return (Number(balance) / Number(POLYGON_USDC_DECIMALS));
     }
 
-    async createFOKOrder(tokenID: string, price: number, size: number, side: Side) {
+    async createFOKOrder(marketId: string, price: number, size: number, side: Side): Promise<boolean> {
         try {
+            let tokenID: string;
+            if (this.marketData[marketId] == undefined) {
+                this.logger.error("Error when fetching market data.", new Error(`Market ${marketId} not registered.`));
+                return false;
+            }
+            if (side == Side.BUY) {
+                tokenID = this.marketData[marketId].yesTokenId;
+            }
+            else {
+                tokenID = this.marketData[marketId].noTokenId;
+            }
+
             const order = await this.clobClient.createOrder({
                 tokenID,
                 price,
-                side,
+                side: Side.BUY, //We hardcode side to buy because Polymarket has NO tokens in a different orderbook
                 size
             }
             );
 
-            console.log("Created Order", order);
+            this.logger.info("Created Order" + order);
 
             const resp = await this.clobClient.postOrder(order, OrderType.FOK);
-            console.log(resp);
-
-            return resp;
+            this.logger.info("Response: " + resp);
+            return true;
         } catch (error: any) {
             console.error("Failed to create order on Polymarket", error);
+            return false;
         }
     }
 }
