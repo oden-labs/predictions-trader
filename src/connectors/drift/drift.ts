@@ -14,8 +14,8 @@ export class DriftConnector extends BaseConnector {
     private perpPricePrecision: number = 1e6;
     private perpSizePrecision: number = 1e9;
 
-    constructor(private config: ConfigService) {
-        super();
+    constructor(private config: ConfigService, connectorName: string) {
+        super(connectorName);
         //Get enviornment variables
         const connection = new Connection(this.config.get("SOLANA_RPC_URL"));
         const solanaPrivateKey = this.config.get("SOLANA_PRIVATE_KEY");

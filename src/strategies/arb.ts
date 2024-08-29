@@ -30,48 +30,41 @@ export class ArbStrategy extends BaseStrategy {
     const targetBalance = await this.targetConnector.fetchUSDCBalance();
 
     this.logger.info("Checking for arbitrage opportunities...");
-    this.logger.info(`Drift balance: ${sourceBalance} USDC`);
-    this.logger.info(`Polymarket balance: ${targetBalance} USDC`);
+    this.logger.info(`${this.sourceConnector.name} USDC balance: ${sourceBalance}`);
+    this.logger.info(`${this.targetConnector.name} USDC balance: ${targetBalance}`);
 
     let totalProfit = 0;
-    let driftCapitalRequired = 0;
-    let polymarketCapitalRequired = 0;
-
-    // Check Drift bids against Polymarket asks
+    // Check source exchange bids against target exchange asks
     for (const sourceBid of sourceOrderbook.bids) {
-      for (const polyAsk of targetOrderbook.asks) {
-        if (sourceBid.price > polyAsk.price) {
+      for (const targetAsk of targetOrderbook.asks) {
+        if (sourceBid.price > targetAsk.price) {
           const maxSizeByBalance = Math.min(
             sourceBalance / sourceBid.price,
-            targetBalance / polyAsk.price
+            targetBalance / targetAsk.price
           );
-          const size = Math.min(sourceBid.size, polyAsk.size, maxSizeByBalance);
-          const profit = (1 - (sourceBid.price + polyAsk.price)) * size;
+          const size = Math.min(sourceBid.size, targetAsk.size, maxSizeByBalance);
+          const profit = (1 - (sourceBid.price + targetAsk.price)) * size;
           if (profit > 0) {
-            polymarketCapitalRequired += polyAsk.price * size;
-            driftCapitalRequired += sourceBid.price * size;
             totalProfit += profit;
-            this.logger.info(`Opportunity: Buy ${size} NO tokens on Polymarket at ${polyAsk.price} and BUY ${size} YES tokens on Drift at ${sourceBid.price}. Profit: ${profit}`);
+            this.logger.info(`Opportunity: Buy ${size} NO tokens on ${this.targetConnector.name} at ${targetAsk.price} and BUY ${size} YES tokens on ${this.sourceConnector.name} at ${sourceBid.price}. Profit: ${profit}`);
           }
         }
       }
     }
 
-    // Check Polymarket bids against Drift asks
-    for (const polyBid of targetOrderbook.bids) {
-      for (const driftAsk of sourceOrderbook.asks) {
-        if (polyBid.price > driftAsk.price) {
+    // Check target bids against Drift asks
+    for (const targetBid of targetOrderbook.bids) {
+      for (const sourceAsk of sourceOrderbook.asks) {
+        if (targetBid.price > sourceAsk.price) {
           const maxSizeByBalance = Math.min(
-            sourceBalance / driftAsk.price,
-            targetBalance / polyBid.price
+            sourceBalance / sourceAsk.price,
+            targetBalance / targetBid.price
           );
-          const size = Math.min(polyBid.size, driftAsk.size, maxSizeByBalance);
-          const profit = (polyBid.price - driftAsk.price) * size;
+          const size = Math.min(targetBid.size, sourceAsk.size, maxSizeByBalance);
+          const profit = (targetBid.price - sourceAsk.price) * size;
           if (profit > 0) {
-            driftCapitalRequired += driftAsk.price * size;
-            polymarketCapitalRequired += polyBid.price * size; // Capital required for shorting on Polymarket
             totalProfit += profit;
-            this.logger.info(`Opportunity: Long ${size} on Drift at ${driftAsk.price}, Short on Polymarket at ${polyBid.price}. Profit: ${profit}`);
+            this.logger.info(`Opportunity: Long ${size} on ${this.sourceConnector.name} at ${sourceAsk.price}, Short on ${this.targetConnector.name} at ${targetBid.price}. Profit: ${profit}`);
           }
         }
       }
@@ -84,10 +77,6 @@ export class ArbStrategy extends BaseStrategy {
 
     else {
       this.logger.info(`Total potential profit: ${totalProfit}`);
-      this.logger.info(`Capital required on Drift: ${driftCapitalRequired}`);
-      this.logger.info(`Capital required on Polymarket: ${polymarketCapitalRequired}`);
-      this.logger.info(`Total capital required: ${(driftCapitalRequired + polymarketCapitalRequired)}`);
-      this.logger.info(`ROI: ${((totalProfit / (driftCapitalRequired + polymarketCapitalRequired)) * 100)}%`);
     }
   }
 }

@@ -11,9 +11,9 @@ const configService = new ConfigService();
 function createConnector(connectorId: string): BaseConnector {
     switch (connectorId) {
         case 'polymarket':
-            return new PolymarketConnector(configService);
+            return new PolymarketConnector(configService, connectorId );
         case 'drift':
-            return new DriftConnector(configService);
+            return new DriftConnector(configService, connectorId);
         default:
             throw new Error(`Unknown connector: ${connectorId}`);
     }

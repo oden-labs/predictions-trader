@@ -16,8 +16,8 @@ export class PolymarketConnector extends BaseConnector {
     private clobClient: ClobClient;
     private proxyAddress: string;
 
-    constructor(private config: ConfigService) {
-        super();
+    constructor(private config: ConfigService, connectorName: string) {
+        super(connectorName);
         const privateKey = this.config.get("ETHEREUM_PRIVATE_KEY");
         this.polygonRPCURL = this.config.get("POLYGON_RPC_URL");
         if (!privateKey) {
@@ -61,9 +61,11 @@ export class PolymarketConnector extends BaseConnector {
         console.log(resp);
     }
 
-        async fetchOrderbook(tokenID: string): Promise<Orderbook> {
-            try {
-                const resp = await this.clobClient.getOrderBook(tokenID);
+    async fetchOrderbook(tokenID: string): Promise<Orderbook> {
+        try {
+            const resp = await this.clobClient.getOrderBook(tokenID);
+            console.log(resp);
+            if (resp) {
                 const orderbook: Orderbook = {
                     bids: resp.bids
                         .map(bid => ({ price: Number(bid.price), size: Number(bid.size) }))
@@ -73,11 +75,13 @@ export class PolymarketConnector extends BaseConnector {
                         .sort((a, b) => a.price - b.price)
                 };
                 return orderbook;
-            } catch (error: any) {
-                this.logger.error("Failed to fetch orderbook from Polymarket", error);
-                return { bids: [], asks: [] };
             }
+            else throw new Error("Failed to fetch orderbook from Polymarket");
+        } catch (error: any) {
+            this.logger.error("Failed to fetch orderbook from Polymarket", error);
+            return { bids: [], asks: [] };
         }
+    }
 
     async createLimitOrder(tokenID: string, price: number, size: number, side: Side) {
         this.assertInitialized();

@@ -27,5 +27,8 @@
     "bs58": "^6.0.0",
     "dotenv": "^16.4.5",
     "path": "^0.12.7"
+  },
+  "devDependencies": {
+    "ts-node-dev": "^2.0.0"
   }
 }
