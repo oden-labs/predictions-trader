@@ -36,10 +36,9 @@ export class DriftConnector extends BaseConnector {
             connection,
             wallet,
             env: 'mainnet-beta',
-            activeSubAccountId: 2,
             accountSubscription: {
-                type: 'polling',
-                accountLoader: new BulkAccountLoader(connection, 'confirmed', 1000)
+                type: 'websocket',
+                // accountLoader: new BulkAccountLoader(connection, 'confirmed', 1000)
             }
         });
     }
@@ -89,7 +88,8 @@ export class DriftConnector extends BaseConnector {
             return scaledOrderbook;
         } catch (error: any) {
             this.logger.error('Error fetching orderbook:', error);
-            throw error;
+            return { bids: [], asks: [] };
+
         }
     }
 

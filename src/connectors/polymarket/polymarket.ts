@@ -61,23 +61,23 @@ export class PolymarketConnector extends BaseConnector {
         console.log(resp);
     }
 
-    async fetchOrderbook(tokenID: string): Promise<Orderbook> {
-        try {
-            const resp = await this.clobClient.getOrderBook(tokenID);
-            const orderbook: Orderbook = {
-                bids: resp.bids
-                    .map(bid => ({ price: Number(bid.price), size: Number(bid.size) }))
-                    .sort((a, b) => b.price - a.price),
-                asks: resp.asks
-                    .map(ask => ({ price: Number(ask.price), size: Number(ask.size) }))
-                    .sort((a, b) => a.price - b.price)
-            };
-            return orderbook;
-        } catch (error: any) {
-            this.logger.error("Failed to fetch orderbook from Polymarket", error);
-            throw error;
+        async fetchOrderbook(tokenID: string): Promise<Orderbook> {
+            try {
+                const resp = await this.clobClient.getOrderBook(tokenID);
+                const orderbook: Orderbook = {
+                    bids: resp.bids
+                        .map(bid => ({ price: Number(bid.price), size: Number(bid.size) }))
+                        .sort((a, b) => b.price - a.price),
+                    asks: resp.asks
+                        .map(ask => ({ price: Number(ask.price), size: Number(ask.size) }))
+                        .sort((a, b) => a.price - b.price)
+                };
+                return orderbook;
+            } catch (error: any) {
+                this.logger.error("Failed to fetch orderbook from Polymarket", error);
+                return { bids: [], asks: [] };
+            }
         }
-    }
 
     async createLimitOrder(tokenID: string, price: number, size: number, side: Side) {
         this.assertInitialized();
