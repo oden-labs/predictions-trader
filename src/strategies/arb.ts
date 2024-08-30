@@ -1,4 +1,4 @@
-import { Orderbook, ArbStrategyConfig } from "../models/types";
+import { Orderbook, ArbStrategyConfig, Side } from "../models/types";
 import { BaseStrategy } from "./BaseStrategy";
 import {
   BaseConnector
@@ -46,9 +46,23 @@ export class ArbStrategy extends BaseStrategy {
           const size = Math.min(sourceBid.size, targetAsk.size, maxSizeByBalance);
           const profit = (1 - (sourceBid.price + targetAsk.price)) * size;
           if (profit > 0) {
-            //Buy low in target exchange and sell high in source exchange -> ezpz  
-            totalProfit += profit;
             this.logger.info(`Opportunity: Buy ${size} NO tokens on ${this.targetConnector.name} at ${targetAsk.price} and BUY ${size} YES tokens on ${this.sourceConnector.name} at ${sourceBid.price}. Profit: ${profit}`);
+
+            //Buy low in target exchange and sell high in source exchange -> ezpz
+            if (await this.targetConnector.createFOKOrder(this.arbStrategyConfig.target.market_id, targetAsk.price, size, Side.BUY)) {
+              this.logger.error("Error while placing sell order on source connector! Buy order was successful but sell order failed.");
+            }
+            else {
+              const sellOrderStatus = await this.sourceConnector.createFOKOrder(this.arbStrategyConfig.source.market_id, sourceBid.price, size, Side.SELL);
+              if (!sellOrderStatus) {
+                this.logger.error("Error while placing sell order on source connector! Buy order was successful but sell order failed.");
+              }
+              else {
+                this.logger.info(`SUCCESS!: Bought ${size} NO tokens on ${this.targetConnector.name} at ${targetAsk.price} and BUY ${size} YES tokens on ${this.sourceConnector.name} at ${sourceBid.price}. Profit: ${profit}`);
+              }
+            }
+
+            totalProfit += profit;
           }
         }
       }
@@ -68,6 +82,19 @@ export class ArbStrategy extends BaseStrategy {
             //Buy low in the source exchange and sell high in the target exchange -> ezpz
             totalProfit += profit;
             this.logger.info(`Opportunity: Buy ${size} on ${this.sourceConnector.name} at ${sourceAsk.price}, and sell on ${this.targetConnector.name} at ${targetBid.price}. Profit: ${profit}`);
+            //Buy low in source exchange and sell high in target exchange -> ezpz
+            if (await this.sourceConnector.createFOKOrder(this.arbStrategyConfig.source.market_id, sourceAsk.price, size, Side.SELL)) {
+              this.logger.error("Error while placing sell order on source connector! Buy order was successful but sell order failed.");
+            }
+            else {
+              const sellOrderStatus = await this.targetConnector.createFOKOrder(this.arbStrategyConfig.source.market_id, targetBid.price, size, Side.SELL);
+              if (!sellOrderStatus) {
+                this.logger.error("Error while placing sell order on source connector! Buy order was successful but sell order failed.");
+              }
+              else {
+                this.logger.info(`Success! Bought ${size} on ${this.sourceConnector.name} at ${sourceAsk.price}, and sold on ${this.targetConnector.name} at ${targetBid.price}. Profit: ${profit}`);
+              }
+            }
 
           }
         }
