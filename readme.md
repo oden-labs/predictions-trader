@@ -4,11 +4,17 @@
 
 Use the existing arbitrage strategy or create your own. Currently supports Drift and PolyMarket. If you would like to add another connector, please open an issue or message me on X at https://x.com/ashish24rawat.
 
-Currently working on 
+Currently working on a cross exchange market making strategy.
 
 ## DISCLAIMER
 
-The bot in BETA and will most probably contain bugs. Use at your own discrection. YOU MAY LOSE FUNDS. 
+The bot in BETA and will most probably contain bugs. Use at your own discrection. YOU MAY LOSE FUNDS. Roadmap
+
+
+- [✅] Drift & Polymarket connectors 
+- [] arb strat (in progress)
+- [] test script
+- [] cross exchange MM
 
 ## Prerequisites
 
@@ -26,11 +32,11 @@ The bot in BETA and will most probably contain bugs. Use at your own discrection
 - `src/utils/`: Utilities like ConfigService and Logger
 - `src/index.ts`: Main execution file
 
-## Setting Up the Environment
+## Getting started
 
 1. Copy the .env.example and create a new .env file at the root of the project
 
-2. Fill in the required environment variables in the .env file. Your environment variables never leave your device. Double check the source code to ensure this is the case! (Don't trust, verify)
+2. Fill in the required environment variables in the .env file. Your environment variables never leave your device. Double check the source code to ensure this is the case! (Don't trust, verify!)
 
 3. Ensure you have sufficient USDC balance on both Polygon and Solana networks.    
 
@@ -51,7 +57,7 @@ The bot in BETA and will most probably contain bugs. Use at your own discrection
   - `balance_perc`: Adjust the percentage of your balance to use for trades
   
   - `min_spread`: Set the minimum price difference required for the bot to execute a trade
-- Save the file and restart the bot for changes to take effect
+- Save the config file
 
 
 5. Install dependencies:
@@ -59,22 +65,8 @@ The bot in BETA and will most probably contain bugs. Use at your own discrection
 
 6. Run the bot
    - npx ts-node src/index.ts
-
+Environment
 7. Monitor the bot's activity:
    - Watch the console output for real-time information on market conditions, arbitrage opportunities, and executed trades.
    - The bot will log important events, including initialization status, balance updates, and trade executions.
 
-## Disclaimer
-
-Use at your own risk. Always be aware of the financial and legal implications of automated trading.
-
-Remember to always monitor your bot's performance and adjust settings as needed to optimize your trading strategy.
-
-
-This repository is under active development and will most probably contain bugs. USE AT YOUR OWN RISK.
-
-
-- [✅] Drift & Polymarket connectors 
-- [] arb strat (in progress)
-- [] test script
-- [] cross exchange MM
