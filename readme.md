@@ -38,9 +38,12 @@ The bot in BETA and will most probably contain bugs. Use at your own discrection
 
 2. Fill in the required environment variables in the .env file. Your environment variables never leave your device. Double check the source code to ensure this is the case! (Don't trust, verify!)
 
-3. Ensure you have sufficient USDC balance on both Polygon and Solana networks.    
+3. Ensure you have sufficient USDC balance on both Polygon and Solana networks for Polymarket and Drift. 
+ 
+4. Install dependencies:
+   - run npm install to install the required dependencies
 
-4. Adjusting the strategy:
+5. Adjusting the strategy:
 - Open `config/prod.ts`
 - Modify the `params` object in the strategy configuration:
   - `market_id`: Set the market ID for the market you want to trade. It is the slug of the market you want to trade. You can get the slug from the URL of Polymarket/Drift 
@@ -59,9 +62,6 @@ The bot in BETA and will most probably contain bugs. Use at your own discrection
   - `min_spread`: Set the minimum price difference required for the bot to execute a trade
 - Save the config file
 
-
-5. Install dependencies:
-   - run npm install to install the required dependencies
 
 6. Run the bot
    - npx ts-node src/index.ts
