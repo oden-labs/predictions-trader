@@ -141,6 +141,11 @@ export class PolymarketConnector extends BaseConnector {
             return null;
         }
 
+        if (polyOrder.side === 'SELL') {
+            this.logger.info(`Disregarding order ID: ${polyOrder.id} as it is a sell order.`);
+            return null;
+        }
+
         const side = polyOrder.asset_id === marketData.yesTokenId ? Side.BUY : Side.SELL;
 
         return {
