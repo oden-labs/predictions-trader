@@ -1,7 +1,7 @@
 import { ethers } from "ethers";
 import { ApiKeyCreds, Chain, ClobClient, OrderType, Side } from "@polymarket/clob-client";
 import { POLYMARKET_HOST, POLYGON_USDC_ADDRESS, POLYGON_USDC_DECIMALS } from "../../constants";
-import { Orderbook } from "../../models/types";
+import { Orderbook, Order } from "../../models/types";
 import { BaseConnector } from "../BaseConnector";
 import { ConfigService } from "../../utils/ConfigService";
 import axios from "axios";
@@ -123,6 +123,37 @@ export class PolymarketConnector extends BaseConnector {
             this.logger.error("Failed to fetch orderbook from Polymarket", error);
             return { bids: [], asks: [] };
         }
+    }
+
+    async fetchOpenOrders(): Promise<Order[]> {
+        const resp = await this.clobClient.getOpenOrders();
+        return resp.map(order => this.translatePolymarketOrder(order))
+            .filter((order): order is Order => order !== null);
+    }
+
+    private translatePolymarketOrder(polyOrder: any): Order | null {
+        const marketData = Object.values(this.marketData).find(
+            data => data.yesTokenId === polyOrder.asset_id || data.noTokenId === polyOrder.asset_id
+        );
+
+        if (!marketData) {
+            this.logger.info(`Disregarding order ID: ${polyOrder.id} as it does not match any registered markets.`);
+            return null;
+        }
+
+        const side = polyOrder.asset_id === marketData.yesTokenId ? Side.BUY : Side.SELL;
+
+        return {
+            id: polyOrder.id,
+            status: polyOrder.status === 'LIVE' ? 'OPEN' : polyOrder.status,
+            side: side,
+            price: Number(polyOrder.price),
+            size: Number(polyOrder.original_size),
+            filledSize: Number(polyOrder.size_matched) || 0,
+            marketId: Object.keys(this.marketData).find(key => this.marketData[key] === marketData) || '',
+            expiry: Number(polyOrder.expiration) || 0,
+            orderType: polyOrder.order_type || 'LIMIT'
+        };
     }
 
     async createLimitOrder(marketId: string, price: number, size: number, side: Side): Promise<boolean> {

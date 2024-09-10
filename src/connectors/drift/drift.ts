@@ -1,7 +1,7 @@
 import { BaseConnector } from "../BaseConnector";
 import { ConfigService } from "../../utils/ConfigService";
 import { Connection, Keypair } from "@solana/web3.js";
-import { Wallet, MainnetPerpMarkets, DriftClient, OrderType, PositionDirection } from "@drift-labs/sdk";
+import { Wallet, BulkAccountLoader, MainnetPerpMarkets, DriftClient, OrderType, PositionDirection } from "@drift-labs/sdk";
 import bs58 from 'bs58';
 import { DRIFT_HOST } from '../../constants'
 import axios from 'axios';
@@ -40,8 +40,8 @@ export class DriftConnector extends BaseConnector {
             env: 'mainnet-beta',
             activeSubAccountId: 2,
             accountSubscription: {
-                type: 'websocket',
-                // accountLoader: new BulkAccountLoader(connection, 'confirmed', 1000)
+                type: 'polling',
+                accountLoader: new BulkAccountLoader(connection, 'confirmed', 1000)
             }
         });
     }
@@ -112,6 +112,12 @@ export class DriftConnector extends BaseConnector {
             return { bids: [], asks: [] };
 
         }
+    }
+
+    async fetchOpenOrders(): Promise<any> {
+        const user = this.driftClient.getUser();
+        const openOrders = await user.getOpenOrders();
+        console.log("Open Orders:", openOrders);
     }
 
     async createFOKOrder(marketName: string, price: number, size: number, side: Side): Promise<boolean> {
