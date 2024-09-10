@@ -5,7 +5,7 @@ import { Wallet, BulkAccountLoader, MainnetPerpMarkets, DriftClient, OrderType, 
 import bs58 from 'bs58';
 import { DRIFT_HOST } from '../../constants'
 import axios from 'axios';
-import { Orderbook, Side } from "../../models/types";
+import { Orderbook, Side, Order } from "../../models/types";
 
 
 export class DriftConnector extends BaseConnector {
@@ -114,10 +114,38 @@ export class DriftConnector extends BaseConnector {
         }
     }
 
-    async fetchOpenOrders(): Promise<any> {
+    async fetchOpenOrders(): Promise<Order[]> {
         const user = this.driftClient.getUser();
         const openOrders = await user.getOpenOrders();
-        console.log("Open Orders:", openOrders);
+        return openOrders.map(order => this.translateDriftOrder(order))
+            .filter((order): order is Order => order !== null);
+    }
+
+    private translateDriftOrder(driftOrder: any): Order | null {
+        const side = driftOrder.direction.long ? Side.BUY : Side.SELL;
+        const status = 'OPEN'; //Since we are fetching open orders, we can assume all orders are open
+        const orderType = Object.keys(driftOrder.orderType)[0];
+
+        const marketSlug = Object.keys(this.marketData).find(
+            slug => this.marketData[slug].marketIndex === driftOrder.marketIndex
+        );
+
+        if (!marketSlug) {
+            this.logger.info(`Disregarding order ID: ${driftOrder.orderId} as it does not match any registered markets.`);
+            return null;
+        }
+
+        return {
+            id: driftOrder.orderId.toString(),
+            status: status,
+            side: side,
+            price: Number(driftOrder.price) / this.perpPricePrecision,
+            size: Number(driftOrder.baseAssetAmount) / this.perpSizePrecision,
+            filledSize: Number(driftOrder.baseAssetAmountFilled) / this.perpSizePrecision,
+            marketId: marketSlug,
+            expiry: Number(driftOrder.maxTs),
+            orderType: orderType
+        };
     }
 
     async createFOKOrder(marketName: string, price: number, size: number, side: Side): Promise<boolean> {

@@ -150,7 +150,7 @@ export class PolymarketConnector extends BaseConnector {
 
         return {
             id: polyOrder.id,
-            status: polyOrder.status === 'LIVE' ? 'OPEN' : polyOrder.status,
+            status: 'OPEN', //since we are fetching  open orders, we can assume status is OPEN
             side: side,
             price: Number(polyOrder.price),
             size: Number(polyOrder.original_size),
