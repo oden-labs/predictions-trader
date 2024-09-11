@@ -1,5 +1,6 @@
 {
   "name": "predictions-trader",
+  "type": "module",
   "version": "1.0.0",
   "description": "Predictions trading bot",
   "main": "index.js",
@@ -7,7 +8,7 @@
     "test": "test"
   },
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "test": "jest --verbose"
   },
   "repository": {
     "type": "git",
@@ -29,6 +30,11 @@
     "path": "^0.12.7"
   },
   "devDependencies": {
+    "@types/jest": "^29.5.12",
+    "@types/node": "^22.5.4",
+    "jest": "^29.7.0",
+    "ts-jest": "^29.2.5",
+    "ts-node": "^10.9.2",
     "ts-node-dev": "^2.0.0"
   }
 }

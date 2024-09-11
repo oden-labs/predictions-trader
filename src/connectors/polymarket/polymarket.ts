@@ -8,7 +8,7 @@ import axios from "axios";
 
 export class PolymarketConnector extends BaseConnector {
     private wallet: ethers.Wallet;
-    private marketData: { [slug: string]: { yesTokenId: string, noTokenId: string } } = {};
+    private marketData: { [slug: string]: { yesTokenId: string, noTokenId: string, conditionId: string } } = {};
 
     //Blockchain Balance
     private polygonRPCURL: string;
@@ -63,7 +63,7 @@ export class PolymarketConnector extends BaseConnector {
         return resp;
     }
 
-    async registerMarket(marketSlug: string): Promise<void> {
+    async registerMarket(marketSlug: string): Promise<boolean> {
         this.assertInitialized();
         try {
             const resp = await axios.get(`https://gamma-api.polymarket.com/markets?slug=${marketSlug}`);
@@ -81,10 +81,12 @@ export class PolymarketConnector extends BaseConnector {
 
             this.marketData[marketSlug] = {
                 yesTokenId: clobTokenIds[0],
-                noTokenId: clobTokenIds[1]
+                noTokenId: clobTokenIds[1],
+                conditionId: responseData.conditionId
             };
 
             this.logger.info(`Successfully registered market: ${marketSlug}`);
+            return true;
         } catch (error) {
             if (axios.isAxiosError(error)) {
                 this.logger.error(`Network error while registering market ${marketSlug}: ${error.message}`);
@@ -131,18 +133,104 @@ export class PolymarketConnector extends BaseConnector {
             .filter((order): order is Order => order !== null);
     }
 
+    async cancelMultipleOrders(orderIds: string[]): Promise<{ [orderId: string]: boolean }> {
+        const results: { [orderId: string]: boolean } = {};
+        try {
+            this.logger.info("Received request to cancel orders: " + orderIds);
+            const resp = await this.clobClient.cancelOrders(orderIds);
+
+            for (const orderId of orderIds) {
+                if (resp.canceled && resp.canceled.includes(orderId)) {
+                    results[orderId] = true;
+                    this.logger.info(`Successfully canceled order ${orderId}`);
+                } else if (resp.not_canceled && resp.not_canceled[orderId]) {
+                    results[orderId] = false;
+                    this.logger.info(`Failed to cancel order ${orderId}. Reason: ${resp.not_canceled[orderId]}`);
+                } else {
+                    results[orderId] = false;
+                    this.logger.info(`Unexpected response when canceling order ${orderId}`);
+                }
+            }
+        } catch (error) {
+            this.logger.error(`Error while canceling multiple orders: ${error}`);
+            for (const orderId of orderIds) {
+                results[orderId] = false;
+            }
+        }
+        return results;
+    }
+
+    async cancelOrdersOfMarket(marketSlug: string): Promise<{ [orderId: string]: boolean }> {
+        this.assertInitialized();
+        const results: { [orderId: string]: boolean } = {};
+
+        try {
+            if (!this.marketData[marketSlug]) {
+                throw new Error(`Market ${marketSlug} not registered.`);
+            }
+
+            const market = marketSlug;
+            const assetId = this.marketData[marketSlug].yesTokenId;
+
+            const resp = await this.clobClient.cancelMarketOrders({
+                market,
+                asset_id: assetId
+            });
+
+            resp.canceled.forEach((orderId: string) => {
+                results[orderId] = true;
+            });
+
+            Object.keys(resp.not_canceled).forEach(orderId => {
+                results[orderId] = false;
+            });
+
+            this.logger.info(`Canceled orders for market ${marketSlug}: ${resp.canceled.join(', ')}`);
+            if (Object.keys(resp.not_canceled).length > 0) {
+                this.logger.warn(`Failed to cancel some orders: ${JSON.stringify(resp.not_canceled)}`);
+            }
+
+            return results;
+        } catch (error) {
+            this.logger.error(`Error canceling market orders for ${marketSlug}: ${error}`);
+            throw error;
+        }
+    }
+
+
+    async cancelOrder(orderId: string): Promise<boolean> {
+        try {
+            const resp = await this.clobClient.cancelOrder({
+                orderID: orderId,
+            });
+            if (resp.canceled && resp.canceled.includes(orderId)) {
+                this.logger.info(`Successfully canceled order ${orderId}`);
+                return true;
+            } else if (resp.not_canceled && resp.not_canceled[orderId]) {
+                this.logger.error(`Failed to cancel order ${orderId}. Reason: ${resp.not_canceled[orderId]}`);
+                return false;
+            } else {
+                this.logger.error(`Unexpected response when canceling order ${orderId}`);
+                return false;
+            }
+        } catch (error) {
+            this.logger.error("Failed to cancel order" + error);
+            return false;
+        }
+    }
+
     private translatePolymarketOrder(polyOrder: any): Order | null {
         const marketData = Object.values(this.marketData).find(
             data => data.yesTokenId === polyOrder.asset_id || data.noTokenId === polyOrder.asset_id
         );
 
         if (!marketData) {
-            this.logger.info(`Disregarding order ID: ${polyOrder.id} as it does not match any registered markets.`);
+            this.logger.warn(`Disregarding order ID: ${polyOrder.id} as it does not match any registered markets.`);
             return null;
         }
 
         if (polyOrder.side === 'SELL') {
-            this.logger.info(`Disregarding order ID: ${polyOrder.id} as it is a sell order.`);
+            this.logger.warn(`Disregarding order ID: ${polyOrder.id} as it is a sell order.`);
             return null;
         }
 
@@ -176,7 +264,7 @@ export class PolymarketConnector extends BaseConnector {
                 tokenID = this.marketData[marketId].noTokenId;
             }
 
-            this.logger.info("Creating order with amount:" + size + "and price:" + price);
+            this.logger.info("Creating order with amount: " + size + "and price: " + price);
 
             const order = await this.clobClient.createOrder({
                 tokenID,
@@ -186,7 +274,6 @@ export class PolymarketConnector extends BaseConnector {
                 expiration: 0,
             });
 
-            this.logger.info("Created Order" + order);
 
             const resp = await this.clobClient.postOrder(order, OrderType.GTC);
             this.logger.info(resp);

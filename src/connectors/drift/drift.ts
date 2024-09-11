@@ -55,7 +55,7 @@ export class DriftConnector extends BaseConnector {
 
     //Functions to interact with the Drift API
 
-    async registerMarket(symbol: string): Promise<void> {
+    async registerMarket(symbol: string): Promise<boolean> {
         this.assertInitialized();
         try {
             const market = MainnetPerpMarkets.find(market => market.symbol === symbol);
@@ -67,6 +67,7 @@ export class DriftConnector extends BaseConnector {
             }
             this.marketData[symbol] = { marketIndex: market.marketIndex };
             this.logger.info(`Successfully registered market: ${symbol}`);
+            return true;
         } catch (error) {
             if (error instanceof Error) {
                 this.logger.error(`Error registering market ${symbol}: ${error.message}`);
@@ -114,6 +115,10 @@ export class DriftConnector extends BaseConnector {
         }
     }
 
+    async cancelOrdersOfMarket(_marketId: string): Promise<{ [orderId: string]: boolean; }> {
+        throw new Error('Method not implemented.');
+    }
+
     async fetchOpenOrders(): Promise<Order[]> {
         const user = this.driftClient.getUser();
         const openOrders = await user.getOpenOrders();
@@ -146,6 +151,14 @@ export class DriftConnector extends BaseConnector {
             expiry: Number(driftOrder.maxTs),
             orderType: orderType
         };
+    }
+
+    async cancelOrder(_orderId: string): Promise<boolean> {
+        return false;
+    }
+
+    async cancelMultipleOrders(_orderId: string[]): Promise<{ [orderId: string]: boolean; }> {
+        throw new Error;
     }
 
     async createFOKOrder(marketName: string, price: number, size: number, side: Side): Promise<boolean> {
