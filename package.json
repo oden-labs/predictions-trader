@@ -1,6 +1,5 @@
 {
   "name": "predictions-trader",
-  "type": "module",
   "version": "1.0.0",
   "description": "Predictions trading bot",
   "main": "index.js",
