@@ -4,10 +4,17 @@
 
 Use the existing arbitrage strategy or create your own. Currently supports Drift and PolyMarket. If you would like to add another connector, please open an issue or message me on X at https://x.com/ashish24rawat.
 
-Currently working on a cross exchange market making strategy.
+
+### THIS BOT DOES NOT DEAL WITH MANAGING/CLOSING POSITIONS OR SELLING ERC1155 TOKENS. ONLY SUPPORTS USDC BUY/SELL OPTIONS OF YES/NO TOKENS
 
 ## KNOWN ISSUES
 - Drift order creations always return true because reading the tx is not yet implemented.
+- Drift FoK order is not working currently so we create a limit order with a 30s expiry time for now
+- Polymarket order size/quantity needs to be a whole number because Polymarket API throws an error with incorrect precision otherwise 
+
+## IMPROVEMENTS
+- Enable bulk order creation to save gas costs
+- Implement wallet utilization
 
 ## DISCLAIMER
 
@@ -15,10 +22,9 @@ The bot in BETA and will most probably contain bugs. Use at your own discrection
 
 
 - [✅] Drift & Polymarket connectors 
-- [] arb strat (in progress)
-- [] test script
-- [] cross exchange MM
-- [] place multiple orders
+- [✅] arb strat 
+- [✅] test script
+- [] cross exchange MM 
 
 ## Prerequisites
 

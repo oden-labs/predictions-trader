@@ -3,7 +3,7 @@ import { ConfigService } from "../../utils/ConfigService";
 import { Connection, Keypair } from "@solana/web3.js";
 import { Wallet, BulkAccountLoader, MarketType, MainnetPerpMarkets, DriftClient, OrderType, PositionDirection } from "@drift-labs/sdk";
 import bs58 from 'bs58';
-import { DRIFT_HOST } from '../../constants'
+import { DRIFT_HOST, DRIFT_MAX_PRICE_PRECISION, DRIFT_MAX_SIZE_PRECISION } from '../../constants'
 import axios from 'axios';
 import { Orderbook, Side, Order } from "../../models/types";
 
@@ -47,10 +47,15 @@ export class DriftConnector extends BaseConnector {
     }
 
     async init(): Promise<void> {
-        this.logger.info("Subscribing to Drift...");
-        await this.driftClient.subscribe();
-        this.logger.info("Subscribed to Drift!");
-        this.initialized = true;
+        try {
+            this.logger.info("Subscribing to Drift...");
+            await this.driftClient.subscribe();
+            this.logger.info("Subscribed to Drift!");
+            this.initialized = true;
+        } catch (error) {
+            this.logger.error("Error initializing Drift connection:" + error);
+            throw error;
+        }
     }
 
     //Functions to interact with the Drift API
@@ -79,12 +84,18 @@ export class DriftConnector extends BaseConnector {
     }
 
 
-    public async fetchUSDCBalance(): Promise<number> {
+    async fetchUSDCBalance(): Promise<number> {
         this.assertInitialized();
-        const user = this.driftClient.getUser();
-        const tokenBalance = Number(await user.getFreeCollateral()) / this.perpPricePrecision;
-        return Number(tokenBalance);
+        try {
+            const user = this.driftClient.getUser();
+            const tokenBalance = Number(await user.getFreeCollateral()) / this.perpPricePrecision;
+            return Number(tokenBalance);
+        } catch (error: any) {
+            this.logger.error("Error fetching USDC balance:", error);
+            throw error;
+        }
     }
+
 
     async fetchOrderbook(marketName: string): Promise<Orderbook> {
         this.assertInitialized();
@@ -116,10 +127,15 @@ export class DriftConnector extends BaseConnector {
     }
 
     async fetchOpenOrders(): Promise<Order[]> {
-        const user = this.driftClient.getUser();
-        const openOrders = await user.getOpenOrders();
-        return openOrders.map(order => this.translateDriftOrder(order))
-            .filter((order): order is Order => order !== null);
+        try {
+            const user = this.driftClient.getUser();
+            const openOrders = await user.getOpenOrders();
+            return openOrders.map(order => this.translateDriftOrder(order))
+                .filter((order): order is Order => order !== null);
+        } catch (error: any) {
+            this.logger.error("Error fetching open orders:", error);
+            throw error;
+        }
     }
 
     private translateDriftOrder(driftOrder: any): Order | null {
@@ -150,25 +166,34 @@ export class DriftConnector extends BaseConnector {
     }
 
     async cancelOrder(orderId: string): Promise<boolean> {
-        const txHash = await this.driftClient.cancelOrder(Number(orderId));
-        this.logger.info(`Order ${orderId} cancelled on DRIFT. Transaction hash: ${txHash}`);
-
-        return true
+        try {
+            const txHash = await this.driftClient.cancelOrder(Number(orderId));
+            this.logger.info(`Order ${orderId} cancelled on DRIFT. Transaction hash: ${txHash}`);
+            return true;
+        } catch (error: any) {
+            this.logger.error(`Error cancelling order ${orderId}:`, error);
+            return false;
+        }
     }
 
+
     async cancelMultipleOrders(orderIds: string[]): Promise<{ [orderId: string]: boolean; }> {
-        const numericOrderIds = orderIds.map(Number);
-        const txHash = await this.driftClient.cancelOrdersByIds(numericOrderIds);
+        try {
+            const numericOrderIds = orderIds.map(Number);
+            const txHash = await this.driftClient.cancelOrdersByIds(numericOrderIds);
+            this.logger.info(`Orders cancelled on DRIFT. Transaction hash: ${txHash}`);
 
-        this.logger.info(`Orders cancelled on DRIFT. Transaction hash: ${txHash}`);
+            // Fetch open orders after cancellation to confirm
+            const remainingOrders = await this.fetchOpenOrders();
 
-        // Fetch open orders after cancellation to confirm
-        const remainingOrders = await this.fetchOpenOrders();
-
-        return orderIds.reduce((result, orderId) => {
-            result[orderId] = !remainingOrders.some(order => order.id === orderId);
-            return result;
-        }, {} as { [orderId: string]: boolean });
+            return orderIds.reduce((result, orderId) => {
+                result[orderId] = !remainingOrders.some(order => order.id === orderId);
+                return result;
+            }, {} as { [orderId: string]: boolean });
+        } catch (error: any) {
+            this.logger.error("Error cancelling multiple orders:", error);
+            throw error;
+        }
     }
 
     async cancelOrdersOfMarket(marketId: string): Promise<{ [orderId: string]: boolean }> {
@@ -206,45 +231,63 @@ export class DriftConnector extends BaseConnector {
 
     async createFOKOrder(marketName: string, price: number, size: number, side: Side): Promise<boolean> {
         this.assertInitialized();
-        const position: PositionDirection = side === Side.BUY ? PositionDirection.LONG : PositionDirection.SHORT;
-        const marketIndex = this.marketData[marketName].marketIndex;
-        if (!marketIndex) {
-            this.logger.error("Error when fetching market index.", new Error(`Market ${marketName} not registered.`));
+        try {
+            const position: PositionDirection = side === Side.BUY ? PositionDirection.LONG : PositionDirection.SHORT;
+            const marketIndex = this.marketData[marketName].marketIndex;
+            if (!marketIndex) {
+                this.logger.error("Error when fetching market index.", new Error(`Market ${marketName} not registered.`));
+                return false;
+            }
+
+            price = Number(price.toFixed(DRIFT_MAX_PRICE_PRECISION));
+            size = Number(size.toFixed(DRIFT_MAX_SIZE_PRECISION));
+
+            this.logger.info("Creating order with amount: " + size + " and price: " + price);
+
+            const orderParams = {
+                orderType: OrderType.LIMIT,
+                marketIndex: marketIndex,
+                direction: position,
+                baseAssetAmount: this.driftClient.convertToPerpPrecision(size),
+                price: this.driftClient.convertToPricePrecision(price),
+                max_ts: Math.floor(Date.now() / 1000) + 30
+            }
+            const txHash = await this.driftClient.placePerpOrder(orderParams);
+            this.logger.info("Order placed on DRIFT for market: " + marketName + "with price: " + price + "and size: " + size + ".  Transaction hash: " + txHash);
+            return true;
+        } catch (error: any) {
+            this.logger.error("Error creating FOK order:", error);
             return false;
         }
-
-        const orderParams = {
-            orderType: OrderType.LIMIT,
-            marketIndex: marketIndex,
-            direction: position,
-            baseAssetAmount: this.driftClient.convertToPerpPrecision(size),
-            price: this.driftClient.convertToPerpPrecision(price),
-            immediateOrCancel: true,
-        }
-        const txHash = await this.driftClient.placePerpOrder(orderParams);
-        this.logger.info("Order placed on DRIFT for market: " + marketName + "with price: " + price + "and size: " + size + ".  Transaction hash: " + txHash);
-        return true;
     }
 
-    async createLimitOrder(marketName: string, price: number, size: number, side: Side) {
+
+    async createLimitOrder(marketName: string, price: number, size: number, side: Side): Promise<boolean> {
         this.assertInitialized();
-        const marketIndex = this.marketData[marketName].marketIndex;
-        if (!marketIndex) {
-            this.logger.error("Error when fetching market data.", new Error(`Market ${marketName} not registered.`));
+        try {
+            const marketIndex = this.marketData[marketName].marketIndex;
+            if (!marketIndex) {
+                this.logger.error("Error when fetching market data.", new Error(`Market ${marketName} not registered.`));
+                return false;
+            }
+            price = Number(price.toFixed(DRIFT_MAX_PRICE_PRECISION));
+            size = Number(size.toFixed(DRIFT_MAX_SIZE_PRECISION));
+
+            const position: PositionDirection = side === Side.BUY ? PositionDirection.LONG : PositionDirection.SHORT;
+
+            const orderParams = {
+                orderType: OrderType.LIMIT,
+                marketIndex: marketIndex,
+                direction: position,
+                baseAssetAmount: this.driftClient.convertToPerpPrecision(size),
+                price: this.driftClient.convertToPricePrecision(price),
+            }
+            const txHash = await this.driftClient.placePerpOrder(orderParams);
+            this.logger.info("Order placed on DRIFT for market: " + marketName + "with price: " + price + "and size: " + size + ".  Transaction hash: " + txHash);
+            return true;
+        } catch (error: any) {
+            this.logger.error("Error creating limit order:", error);
             return false;
         }
-
-        const position: PositionDirection = side === Side.BUY ? PositionDirection.LONG : PositionDirection.SHORT;
-
-        const orderParams = {
-            orderType: OrderType.LIMIT,
-            marketIndex: marketIndex,
-            direction: position,
-            baseAssetAmount: this.driftClient.convertToPerpPrecision(size),
-            price: this.driftClient.convertToPricePrecision(price),
-        }
-        const txHash = await this.driftClient.placePerpOrder(orderParams);
-        this.logger.info("Order placed on DRIFT for market: " + marketName + "with price: " + price + "and size: " + size + ".  Transaction hash: " + txHash);
-        return true;
     }
 }
