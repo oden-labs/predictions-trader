@@ -1,6 +1,6 @@
 import { ethers } from "ethers";
 import { ApiKeyCreds, Chain, ClobClient, OrderType, Side } from "@polymarket/clob-client";
-import { POLYMARKET_HOST, POLYGON_USDC_ADDRESS, POLYGON_USDC_DECIMALS } from "../../constants";
+import { POLYMARKET_HOST, POLYGON_USDC_ADDRESS, POLYGON_USDC_DECIMALS, POLYMARKET_MAX_PRICE_PRECISION, POLYMARKET_MAX_SIZE_PRECISION } from "../../constants";
 import { Orderbook, Order } from "../../models/types";
 import { BaseConnector } from "../BaseConnector";
 import { ConfigService } from "../../utils/ConfigService";
@@ -252,6 +252,9 @@ export class PolymarketConnector extends BaseConnector {
     async createLimitOrder(marketId: string, price: number, size: number, side: Side): Promise<boolean> {
         this.assertInitialized();
         try {
+            price = Number(price.toFixed(POLYMARKET_MAX_PRICE_PRECISION));
+            size = Number(size.toFixed(POLYMARKET_MAX_SIZE_PRECISION));
+
             let tokenID: string;
             if (this.marketData[marketId] == undefined) {
                 this.logger.error("Error when fetching market data.", new Error(`Market ${marketId} not registered.`));
@@ -292,8 +295,13 @@ export class PolymarketConnector extends BaseConnector {
         return (Number(balance) / Number(POLYGON_USDC_DECIMALS));
     }
 
+
     async createFOKOrder(marketId: string, price: number, size: number, side: Side): Promise<boolean> {
         try {
+
+            price = Number(price.toFixed(POLYMARKET_MAX_PRICE_PRECISION));
+            size = Number(size.toFixed(POLYMARKET_MAX_SIZE_PRECISION));
+
             let tokenID: string;
             if (this.marketData[marketId] == undefined) {
                 this.logger.error("Error when fetching market data.", new Error(`Market ${marketId} not registered.`));
@@ -306,6 +314,8 @@ export class PolymarketConnector extends BaseConnector {
                 tokenID = this.marketData[marketId].noTokenId;
             }
 
+            this.logger.info("Creating order with amount: " + size + " and price: " + price);
+
             const order = await this.clobClient.createOrder({
                 tokenID,
                 price,
@@ -314,10 +324,9 @@ export class PolymarketConnector extends BaseConnector {
             }
             );
 
-            this.logger.info("Created Order" + order);
 
             const resp = await this.clobClient.postOrder(order, OrderType.FOK);
-            this.logger.info("Response: " + resp);
+            this.logger.info("Response: " + JSON.stringify(resp));
             return true;
         } catch (error: any) {
             console.error("Failed to create order on Polymarket", error);
