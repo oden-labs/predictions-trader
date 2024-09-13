@@ -6,6 +6,7 @@ import {
 } from "../connectors/BaseConnector";
 export class ArbStrategy extends BaseStrategy {
   private arbStrategyConfig: ArbStrategyConfig;
+  private isBusy: boolean = false;
 
   constructor(config: ArbStrategyConfig, protected sourceConnector: BaseConnector,
     protected targetConnector: BaseConnector
@@ -20,94 +21,101 @@ export class ArbStrategy extends BaseStrategy {
   }
 
   async run() {
-    if (!this.sourceConnector.isInitialized() || !this.targetConnector.isInitialized()) {
-      this.logger.error("Connectors are not initialized yet. Waiting for initialization...");
+    if (this.isBusy) {
       return;
     }
-    const sourceOrderbook: Orderbook = await this.sourceConnector.fetchOrderbook(this.arbStrategyConfig.source.market_id);
-    const targetOrderbook: Orderbook = await this.targetConnector.fetchOrderbook(this.arbStrategyConfig.target.market_id);
+    try {
+      this.isBusy = true;
+      if (!this.sourceConnector.isInitialized() || !this.targetConnector.isInitialized()) {
+        this.logger.error("Connectors are not initialized yet. Waiting for initialization...");
+        return;
+      }
 
-    const sourceBalance = await this.sourceConnector.fetchUSDCBalance();
-    const targetBalance = await this.targetConnector.fetchUSDCBalance();
+      const sourceOrderbook: Orderbook = await this.sourceConnector.fetchOrderbook(this.arbStrategyConfig.source.market_id);
+      const targetOrderbook: Orderbook = await this.targetConnector.fetchOrderbook(this.arbStrategyConfig.target.market_id);
 
-    this.logger.info("Checking for arbitrage opportunities...");
-    this.logger.info(`${this.sourceConnector.name} USDC balance: ${sourceBalance}`);
-    this.logger.info(`${this.targetConnector.name} USDC balance: ${targetBalance}`);
+      const sourceBalance = await this.sourceConnector.fetchUSDCBalance();
+      const targetBalance = await this.targetConnector.fetchUSDCBalance();
 
-    let totalProfit = 0;
-    // Check source exchange bids against target exchange asks
-    for (const sourceBid of sourceOrderbook.bids) {
-      for (const targetAsk of targetOrderbook.asks) {
-        if (sourceBid.price > targetAsk.price) {
-          const maxSizeByBalance = Math.min(
-            sourceBalance / sourceBid.price,
-            targetBalance / targetAsk.price
-          );
-          const size = Math.min(sourceBid.size, targetAsk.size, maxSizeByBalance);
-          const profit = (1 - (sourceBid.price + targetAsk.price)) * size;
-          if (profit > 0) {
-            this.logger.info(`Opportunity: Buy ${size} NO tokens on ${this.targetConnector.name} at ${targetAsk.price} and BUY ${size} YES tokens on ${this.sourceConnector.name} at ${sourceBid.price}. Profit: ${profit}`);
+      this.logger.info("Checking for arbitrage opportunities...");
+      this.logger.info(`${this.sourceConnector.name} USDC balance: ${sourceBalance}`);
+      this.logger.info(`${this.targetConnector.name} USDC balance: ${targetBalance}`);
 
-            //Buy low in target exchange and sell high in source exchange -> ezpz
-            if (await this.targetConnector.createFOKOrder(this.arbStrategyConfig.target.market_id, targetAsk.price, size, Side.BUY)) {
-              this.logger.error("Error while placing sell order on source connector! Buy order was successful but sell order failed.");
-            }
-            else {
-              const sellOrderStatus = await this.sourceConnector.createFOKOrder(this.arbStrategyConfig.source.market_id, sourceBid.price, size, Side.SELL);
-              if (!sellOrderStatus) {
-                this.logger.error("Error while placing sell order on source connector! Buy order was successful but sell order failed.");
-              }
-              else {
-                this.logger.info(`SUCCESS!: Bought ${size} NO tokens on ${this.targetConnector.name} at ${targetAsk.price} and BUY ${size} YES tokens on ${this.sourceConnector.name} at ${sourceBid.price}. Profit: ${profit}`);
-              }
-            }
+      let totalProfit = 0;
 
-            totalProfit += profit;
-          }
-        }
+      // Efficient algorithm to find arbitrage opportunities
+      console.log("Checking source orderbook bids with target orderbook asks...");
+      totalProfit += await this.findArbitrageOpportunities(sourceOrderbook.bids, targetOrderbook.asks, sourceBalance, targetBalance, false);
+      console.log("Checking target orderbook bids with source orderbook asks...");
+      totalProfit += await this.findArbitrageOpportunities(targetOrderbook.bids, sourceOrderbook.asks, targetBalance, sourceBalance, true);
+
+      if (totalProfit == 0) {
+        this.logger.info("No arbitrage opportunities found.");
+      } else {
+        this.logger.info(`Total potential profit: ${totalProfit}`);
       }
     }
+    catch (error: any) {
+      this.logger.error("Error in run method:", error);
+    }
+    this.isBusy = false;
+  }
 
-    // Check target exchange bids against source exchange asks
-    for (const targetBid of targetOrderbook.bids) {
-      for (const sourceAsk of sourceOrderbook.asks) {
-        if (targetBid.price > sourceAsk.price) {
-          const maxSizeByBalance = Math.min(
-            sourceBalance / sourceAsk.price,
-            targetBalance / targetBid.price
-          );
-          const size = Math.min(targetBid.size, sourceAsk.size, maxSizeByBalance);
-          const profit = (targetBid.price - sourceAsk.price) * size;
-          if (profit > 0) {
-            //Buy low in the source exchange and sell high in the target exchange -> ezpz
-            totalProfit += profit;
-            this.logger.info(`Opportunity: Buy ${size} on ${this.sourceConnector.name} at ${sourceAsk.price}, and sell on ${this.targetConnector.name} at ${targetBid.price}. Profit: ${profit}`);
-            //Buy low in source exchange and sell high in target exchange -> ezpz
-            if (await this.sourceConnector.createFOKOrder(this.arbStrategyConfig.source.market_id, sourceAsk.price, size, Side.SELL)) {
-              this.logger.error("Error while placing sell order on source connector! Buy order was successful but sell order failed.");
-            }
-            else {
-              const sellOrderStatus = await this.targetConnector.createFOKOrder(this.arbStrategyConfig.source.market_id, targetBid.price, size, Side.SELL);
-              if (!sellOrderStatus) {
-                this.logger.error("Error while placing sell order on source connector! Buy order was successful but sell order failed.");
-              }
-              else {
-                this.logger.info(`Success! Bought ${size} on ${this.sourceConnector.name} at ${sourceAsk.price}, and sold on ${this.targetConnector.name} at ${targetBid.price}. Profit: ${profit}`);
-              }
-            }
+  private async findArbitrageOpportunities(bids: any[], asks: any[], buyBalance: number, sellBalance: number, isSourceBuying: boolean): Promise<number> {
+    let bidIndex = 0;
+    let askIndex = 0;
+    let profit = 0;
 
-          }
-        }
+    while (bidIndex < bids.length && askIndex < asks.length) {
+      const bid = bids[bidIndex];
+      const ask = asks[askIndex];
+
+      if (bid.price <= ask.price) {
+        break; // No more profitable opportunities
+      }
+
+      const maxSizeByBalance = Math.min(buyBalance / ask.price, sellBalance / bid.price);
+      const size = Math.min(bid.size, ask.size, maxSizeByBalance);
+      if (size < 1) {
+        break; //Too small to consider for arb
+      }
+
+      const currentProfit = (bid.price - ask.price) * size;
+
+      if (currentProfit > 0) {
+        profit += currentProfit;
+        await this.executeArbitrage(bid, ask, size, isSourceBuying);
+      }
+
+      if (bid.size > ask.size) {
+        askIndex++;
+      } else if (bid.size < ask.size) {
+        bidIndex++;
+      } else {
+        bidIndex++;
+        askIndex++;
       }
     }
+    return profit;
+  }
 
-    if (totalProfit == 0) {
-      this.logger.info("No arbitrage opportunities found.");
-      return;
-    }
+  private async executeArbitrage(bid: any, ask: any, size: number, isSourceBuying: boolean) {
+    const buyConnector = isSourceBuying ? this.sourceConnector : this.targetConnector;
+    const sellConnector = isSourceBuying ? this.targetConnector : this.sourceConnector;
+    const buyMarketId = isSourceBuying ? this.arbStrategyConfig.source.market_id : this.arbStrategyConfig.target.market_id;
+    const sellMarketId = isSourceBuying ? this.arbStrategyConfig.target.market_id : this.arbStrategyConfig.source.market_id;
 
-    else {
-      this.logger.info(`Total potential profit: ${totalProfit}`);
+    this.logger.info(`Opportunity: Buy ${size} on ${buyConnector.name} at ${ask.price} and sell on ${sellConnector.name} at ${bid.price}. Profit: ${(bid.price - ask.price) * size}`);
+
+    if (await buyConnector.createFOKOrder(buyMarketId, ask.price, size, Side.BUY)) {
+      const sellOrderStatus = await sellConnector.createFOKOrder(sellMarketId, bid.price, size, Side.SELL);
+      if (sellOrderStatus) {
+        this.logger.info(`SUCCESS: Bought ${size} on ${buyConnector.name} at ${ask.price} and sold on ${sellConnector.name} at ${bid.price}. Profit: ${(bid.price - ask.price) * size}`);
+      } else {
+        this.logger.error("Error while placing sell order! Buy order was successful but sell order failed.");
+      }
+    } else {
+      this.logger.error("Error while placing buy order.");
     }
   }
 }
