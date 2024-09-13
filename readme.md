@@ -18,6 +18,7 @@ The bot in BETA and will most probably contain bugs. Use at your own discrection
 - [] arb strat (in progress)
 - [] test script
 - [] cross exchange MM
+- [] place multiple orders
 
 ## Prerequisites
 

@@ -1,7 +1,7 @@
 import { BaseConnector } from "../BaseConnector";
 import { ConfigService } from "../../utils/ConfigService";
 import { Connection, Keypair } from "@solana/web3.js";
-import { Wallet, BulkAccountLoader, MainnetPerpMarkets, DriftClient, OrderType, PositionDirection } from "@drift-labs/sdk";
+import { Wallet, BulkAccountLoader, MarketType, MainnetPerpMarkets, DriftClient, OrderType, PositionDirection } from "@drift-labs/sdk";
 import bs58 from 'bs58';
 import { DRIFT_HOST } from '../../constants'
 import axios from 'axios';
@@ -115,10 +115,6 @@ export class DriftConnector extends BaseConnector {
         }
     }
 
-    async cancelOrdersOfMarket(_marketId: string): Promise<{ [orderId: string]: boolean; }> {
-        throw new Error('Method not implemented.');
-    }
-
     async fetchOpenOrders(): Promise<Order[]> {
         const user = this.driftClient.getUser();
         const openOrders = await user.getOpenOrders();
@@ -153,13 +149,60 @@ export class DriftConnector extends BaseConnector {
         };
     }
 
-    async cancelOrder(_orderId: string): Promise<boolean> {
-        return false;
+    async cancelOrder(orderId: string): Promise<boolean> {
+        const txHash = await this.driftClient.cancelOrder(Number(orderId));
+        this.logger.info(`Order ${orderId} cancelled on DRIFT. Transaction hash: ${txHash}`);
+
+        return true
     }
 
-    async cancelMultipleOrders(_orderId: string[]): Promise<{ [orderId: string]: boolean; }> {
-        throw new Error;
+    async cancelMultipleOrders(orderIds: string[]): Promise<{ [orderId: string]: boolean; }> {
+        const numericOrderIds = orderIds.map(Number);
+        const txHash = await this.driftClient.cancelOrdersByIds(numericOrderIds);
+
+        this.logger.info(`Orders cancelled on DRIFT. Transaction hash: ${txHash}`);
+
+        // Fetch open orders after cancellation to confirm
+        const remainingOrders = await this.fetchOpenOrders();
+
+        return orderIds.reduce((result, orderId) => {
+            result[orderId] = !remainingOrders.some(order => order.id === orderId);
+            return result;
+        }, {} as { [orderId: string]: boolean });
     }
+
+    async cancelOrdersOfMarket(marketId: string): Promise<{ [orderId: string]: boolean }> {
+        this.assertInitialized();
+        const marketIndex = this.marketData[marketId]?.marketIndex;
+
+        if (marketIndex === undefined) {
+            throw new Error(`Market ${marketId} not registered.`);
+        }
+
+        try {
+            const txHash = await this.driftClient.cancelOrders(
+                MarketType.PERP,
+                marketIndex,
+            );
+
+            this.logger.info(`Market Orders of ${marketId} cancelled on DRIFT. Transaction hash: ${txHash}`);
+
+
+            // Fetch open orders after cancellation to confirm
+            const remainingOrders = await this.fetchOpenOrders();
+            const cancelledOrders = remainingOrders.filter(order => order.marketId !== marketId);
+
+            return cancelledOrders.reduce((result, order) => {
+                result[order.id] = true;
+                return result;
+            }, {} as { [orderId: string]: boolean });
+        } catch (error) {
+            this.logger.error(`Error cancelling orders for market ${marketId}:` + error);
+            throw error;
+        }
+    }
+
+
 
     async createFOKOrder(marketName: string, price: number, size: number, side: Side): Promise<boolean> {
         this.assertInitialized();
