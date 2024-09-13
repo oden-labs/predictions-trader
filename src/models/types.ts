@@ -25,6 +25,17 @@ export interface ArbStrategyConfig extends BaseStrategyConfig {
   };
 }
 
+export interface Order {
+  id: string;
+  status: 'OPEN' | 'FILLED' | 'CANCELLED';
+  side: Side;
+  price: number;
+  size: number;
+  filledSize: number;
+  marketId: string;
+  expiry: number;
+  orderType: string;
+}
 
 export interface BaseStrategyConfig {
   id: string;

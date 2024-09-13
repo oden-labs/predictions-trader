@@ -6,6 +6,9 @@ Use the existing arbitrage strategy or create your own. Currently supports Drift
 
 Currently working on a cross exchange market making strategy.
 
+## KNOWN ISSUES
+- Drift order creations always return true because reading the tx is not yet implemented.
+
 ## DISCLAIMER
 
 The bot in BETA and will most probably contain bugs. Use at your own discrection. YOU MAY LOSE FUNDS. Roadmap
@@ -15,6 +18,7 @@ The bot in BETA and will most probably contain bugs. Use at your own discrection
 - [] arb strat (in progress)
 - [] test script
 - [] cross exchange MM
+- [] place multiple orders
 
 ## Prerequisites
 

@@ -1,11 +1,11 @@
 import { BaseConnector } from "../BaseConnector";
 import { ConfigService } from "../../utils/ConfigService";
 import { Connection, Keypair } from "@solana/web3.js";
-import { Wallet, MainnetPerpMarkets, DriftClient, OrderType, PositionDirection } from "@drift-labs/sdk";
+import { Wallet, BulkAccountLoader, MarketType, MainnetPerpMarkets, DriftClient, OrderType, PositionDirection } from "@drift-labs/sdk";
 import bs58 from 'bs58';
 import { DRIFT_HOST } from '../../constants'
 import axios from 'axios';
-import { Orderbook, Side } from "../../models/types";
+import { Orderbook, Side, Order } from "../../models/types";
 
 
 export class DriftConnector extends BaseConnector {
@@ -40,8 +40,8 @@ export class DriftConnector extends BaseConnector {
             env: 'mainnet-beta',
             activeSubAccountId: 2,
             accountSubscription: {
-                type: 'websocket',
-                // accountLoader: new BulkAccountLoader(connection, 'confirmed', 1000)
+                type: 'polling',
+                accountLoader: new BulkAccountLoader(connection, 'confirmed', 1000)
             }
         });
     }
@@ -55,7 +55,7 @@ export class DriftConnector extends BaseConnector {
 
     //Functions to interact with the Drift API
 
-    async registerMarket(symbol: string): Promise<void> {
+    async registerMarket(symbol: string): Promise<boolean> {
         this.assertInitialized();
         try {
             const market = MainnetPerpMarkets.find(market => market.symbol === symbol);
@@ -67,6 +67,7 @@ export class DriftConnector extends BaseConnector {
             }
             this.marketData[symbol] = { marketIndex: market.marketIndex };
             this.logger.info(`Successfully registered market: ${symbol}`);
+            return true;
         } catch (error) {
             if (error instanceof Error) {
                 this.logger.error(`Error registering market ${symbol}: ${error.message}`);
@@ -113,6 +114,95 @@ export class DriftConnector extends BaseConnector {
 
         }
     }
+
+    async fetchOpenOrders(): Promise<Order[]> {
+        const user = this.driftClient.getUser();
+        const openOrders = await user.getOpenOrders();
+        return openOrders.map(order => this.translateDriftOrder(order))
+            .filter((order): order is Order => order !== null);
+    }
+
+    private translateDriftOrder(driftOrder: any): Order | null {
+        const side = driftOrder.direction.long ? Side.BUY : Side.SELL;
+        const status = 'OPEN'; //Since we are fetching open orders, we can assume all orders are open
+        const orderType = Object.keys(driftOrder.orderType)[0];
+
+        const marketSlug = Object.keys(this.marketData).find(
+            slug => this.marketData[slug].marketIndex === driftOrder.marketIndex
+        );
+
+        if (!marketSlug) {
+            this.logger.info(`Disregarding order ID: ${driftOrder.orderId} as it does not match any registered markets.`);
+            return null;
+        }
+
+        return {
+            id: driftOrder.orderId.toString(),
+            status: status,
+            side: side,
+            price: Number(driftOrder.price) / this.perpPricePrecision,
+            size: Number(driftOrder.baseAssetAmount) / this.perpSizePrecision,
+            filledSize: Number(driftOrder.baseAssetAmountFilled) / this.perpSizePrecision,
+            marketId: marketSlug,
+            expiry: Number(driftOrder.maxTs),
+            orderType: orderType
+        };
+    }
+
+    async cancelOrder(orderId: string): Promise<boolean> {
+        const txHash = await this.driftClient.cancelOrder(Number(orderId));
+        this.logger.info(`Order ${orderId} cancelled on DRIFT. Transaction hash: ${txHash}`);
+
+        return true
+    }
+
+    async cancelMultipleOrders(orderIds: string[]): Promise<{ [orderId: string]: boolean; }> {
+        const numericOrderIds = orderIds.map(Number);
+        const txHash = await this.driftClient.cancelOrdersByIds(numericOrderIds);
+
+        this.logger.info(`Orders cancelled on DRIFT. Transaction hash: ${txHash}`);
+
+        // Fetch open orders after cancellation to confirm
+        const remainingOrders = await this.fetchOpenOrders();
+
+        return orderIds.reduce((result, orderId) => {
+            result[orderId] = !remainingOrders.some(order => order.id === orderId);
+            return result;
+        }, {} as { [orderId: string]: boolean });
+    }
+
+    async cancelOrdersOfMarket(marketId: string): Promise<{ [orderId: string]: boolean }> {
+        this.assertInitialized();
+        const marketIndex = this.marketData[marketId]?.marketIndex;
+
+        if (marketIndex === undefined) {
+            throw new Error(`Market ${marketId} not registered.`);
+        }
+
+        try {
+            const txHash = await this.driftClient.cancelOrders(
+                MarketType.PERP,
+                marketIndex,
+            );
+
+            this.logger.info(`Market Orders of ${marketId} cancelled on DRIFT. Transaction hash: ${txHash}`);
+
+
+            // Fetch open orders after cancellation to confirm
+            const remainingOrders = await this.fetchOpenOrders();
+            const cancelledOrders = remainingOrders.filter(order => order.marketId !== marketId);
+
+            return cancelledOrders.reduce((result, order) => {
+                result[order.id] = true;
+                return result;
+            }, {} as { [orderId: string]: boolean });
+        } catch (error) {
+            this.logger.error(`Error cancelling orders for market ${marketId}:` + error);
+            throw error;
+        }
+    }
+
+
 
     async createFOKOrder(marketName: string, price: number, size: number, side: Side): Promise<boolean> {
         this.assertInitialized();
