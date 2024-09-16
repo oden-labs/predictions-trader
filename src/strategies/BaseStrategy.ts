@@ -11,7 +11,7 @@ export abstract class BaseStrategy {
         protected sourceConnector: BaseConnector,
         protected targetConnector: BaseConnector
     ) {
-        this.logger = new Logger(this.constructor.name);
+        this.logger = new Logger(this.config.id);
     }
 
     setConnectors(sourceConnector: BaseConnector, targetConnector: BaseConnector): void {
