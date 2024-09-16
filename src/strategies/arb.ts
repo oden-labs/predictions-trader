@@ -37,6 +37,11 @@ export class ArbStrategy extends BaseStrategy {
       const sourceBalance = await this.sourceConnector.fetchUSDCBalance();
       const targetBalance = await this.targetConnector.fetchUSDCBalance();
 
+      if(sourceBalance < 1 || targetBalance < 1) {
+        this.logger.info("Not enough funds to execute arbitrage. Skipping...");
+        return;
+      }
+
       this.logger.info("Checking for arbitrage opportunities...");
       this.logger.info(`${this.sourceConnector.name} USDC balance: ${sourceBalance}`);
       this.logger.info(`${this.targetConnector.name} USDC balance: ${targetBalance}`);
