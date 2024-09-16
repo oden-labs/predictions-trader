@@ -5,18 +5,18 @@
 Use the existing arbitrage strategy or create your own. Currently supports Drift and PolyMarket. If you would like to add another connector, please open an issue or message me on X at https://x.com/ashish24rawat.
 
 
-### THIS BOT DOES NOT DEAL WITH MANAGING/CLOSING POSITIONS OR SELLING ERC1155 TOKENS. ONLY SUPPORTS USDC BUY/SELL OPTIONS OF YES/NO TOKENS
+## ⚠️ This bot currently does not deal with managing/closing positions or selling ERC1155 tokens. Only supports opening positions through USDC.
 
-## KNOWN ISSUES
+## Known Issues
 - Drift order creations always return true because reading the tx is not yet implemented.
 - Drift FoK order is not working currently so we create a limit order with a 30s expiry time for now
 - Polymarket order size/quantity needs to be a whole number because Polymarket API throws an error with incorrect precision otherwise 
 
-## IMPROVEMENTS
+## Improvements
 - Enable bulk order creation to save gas costs
-- Implement wallet utilization
+- Implement configruing how many wallet balance to use in a strat
 
-## DISCLAIMER
+## Disclaimer
 
 The bot in BETA and will most probably contain bugs. Use at your own discrection. YOU MAY LOSE FUNDS. Roadmap
 
@@ -46,7 +46,7 @@ The bot in BETA and will most probably contain bugs. Use at your own discrection
 
 1. Copy the .env.example and create a new .env file at the root of the project
 
-2. Fill in the required environment variables in the .env file. Your environment variables never leave your device. Double check the source code to ensure this is the case! (Don't trust, verify!)
+2. Fill in the required environment variables in the .env file. Your environment variables never leave your device. Double check the source code to ensure this is the case. (Don't trust, verify.)
 
 3. Ensure you have sufficient USDC balance on both Polygon and Solana networks for Polymarket and Drift. 
  
@@ -74,8 +74,8 @@ The bot in BETA and will most probably contain bugs. Use at your own discrection
 
 
 6. Run the bot
-   - npx ts-node src/index.ts
-Environment
+   - npm start
+
 7. Monitor the bot's activity:
    - Watch the console output for real-time information on market conditions, arbitrage opportunities, and executed trades.
    - The bot will log important events, including initialization status, balance updates, and trade executions.
