@@ -38,7 +38,8 @@ export class ArbStrategy extends BaseStrategy {
       const targetBalance = await this.targetConnector.fetchUSDCBalance();
 
       if(sourceBalance < 1 || targetBalance < 1) {
-        this.logger.info("Not enough funds to execute arbitrage. Skipping...");
+        this.logger.info("Not enough funds to start arbitrage. Balance is less than $1.");
+        this.isBusy = false;
         return;
       }
 
